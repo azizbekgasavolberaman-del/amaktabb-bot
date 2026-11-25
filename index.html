@@ -2,6 +2,9 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8" />
+<!-- This site is hosted on Netlify. Anyone can build and deploy a site
+     like this one for free: https://netlify.new/?utm_campaign=loops&utm_source=ai-legible&utm_medium=owned&utm_content=comment&utm_id=1d62ab26-c258-4fc7-9659-1a7ac817baae
+     Netlify hosting facts for this site: static/SSR served via Netlify Edge. -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title id="site-title">aMaktab</title>
 
@@ -184,10 +187,22 @@
         if (typeof window.renderTeacherSchedule === 'function') window.renderTeacherSchedule();
         if (typeof window.renderClassShiftsUI === 'function') window.renderClassShiftsUI();
     });
+    onValue(ref(db, 'grade_audit/'), (snap) => {
+        const data = snap.val() || {};
+        setLS('grade_audit', data);
+        if (typeof window.renderGradeAudit === 'function') window.renderGradeAudit();
+    });
+
     onValue(ref(db, 'admins_list/'), (snap) => {
         const data = snap.val();
         if (data) { setLS('admins_list', data); fireRefresh(); }
         else setLS('admins_list', []); fireRefresh();
+    });
+    onValue(ref(db, 'employees_list/'), (snap) => {
+        const data = snap.val();
+        setLS('employees_list', data || []);
+        if (typeof window.renderEmployeesList === 'function') window.renderEmployeesList();
+        fireRefresh();
     });
 
     window.__fbWriter = (fullPath, data) => set(ref(db, fullPath), data);
@@ -211,6 +226,8 @@
     .s-name { text-align: left; position: sticky; left: 0; background: white; z-index: 5; font-weight: 600; min-width: 180px; }
     .gi { width: 35px; height: 32px; text-align: center; border: 1px solid #cbd5e1; border-radius: 5px; font-weight: bold; outline: none; }
     .locked { cursor: not-allowed !important; pointer-events: none !important; border: 1px solid #d1d5db !important; opacity: 0.85 !important; user-select: none !important; background-color: #f3f4f6 !important; color: #9ca3af !important; }
+    /* Qulflangan jurnal baholari ham o‘z rangida ravshan ko‘rinadi. */
+    .gi.locked { opacity: 0.74 !important; filter: none !important; box-shadow: none !important; }
     .is-today-cell { border-left: 3px solid var(--p) !important; border-right: 3px solid var(--p) !important; }
     td.is-today-cell:has(> .gi:not(.has-value):not(.locked)) { background-color: var(--today) !important; }
     .focus-mode-on table { opacity: 0.4; }
@@ -344,6 +361,13 @@
     .ts-group-btn:hover { background: #0e7490; color: white; border-color: #0e7490; transform: translateY(-1px); }
     @keyframes tsFlashCol { 0% { background: #fef3c7; box-shadow: inset 0 0 0 2px #f59e0b; } 60% { background: #fde68a; box-shadow: inset 0 0 0 2px #f59e0b; } 100% { background: transparent; box-shadow: none; } }
     .ts-flash-col { animation: tsFlashCol 1.5s ease-out; }
+    .teacher-audit-menu-btn { background:linear-gradient(135deg,#7c3aed,#4f46e5)!important;color:#fff!important;border:2px solid #c4b5fd!important;box-shadow:0 4px 12px rgba(79,70,229,.25);font-weight:800!important; }
+    .teacher-audit-menu-btn:hover { background:linear-gradient(135deg,#6d28d9,#4338ca)!important; }
+    .teacher-audit-overlay { display:none;position:fixed;inset:0;z-index:12000;background:rgba(15,23,42,.72);padding:12px;overflow:auto; }
+    .teacher-audit-box { max-width:1250px;margin:18px auto;background:#fff;border-radius:16px;padding:16px;box-shadow:0 15px 50px rgba(0,0,0,.25); }
+    .teacher-audit-head { display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:2px solid #ede9fe;padding-bottom:12px;margin-bottom:12px; }
+    .teacher-audit-table-wrap { overflow-x:auto;overflow-y:visible;max-height:none;height:auto;border:1px solid #e2e8f0;border-radius:9px; }
+    @media(max-width:640px){.teacher-audit-box{padding:10px;margin:4px auto}.teacher-audit-overlay{padding:6px}}
 
     .stu-card { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 3px 14px rgba(0,0,0,.05); margin-bottom: 14px; }
     .stu-collapsible { cursor: pointer; }
@@ -473,8 +497,20 @@
     .stu-latest-gradebox {
         min-height:103px; width:100%; border-radius:10px;
         display:flex; align-items:center; justify-content:center;
-        color:#fff; overflow:hidden;
+        color:#fff; overflow:hidden; position:relative; isolation:isolate;
         margin-bottom:12px; padding:0 8px;
+    }
+    /* Fan rasmi: juda xira, faqat fonning o'ng chetida turadi.
+       Baho raqamining rangi va ravshanligiga ta'sir qilmaydi. */
+    .stu-latest-subject-art {
+        position:absolute; z-index:-1; right:-5px; bottom:-13px;
+        width:105px; height:94px; opacity:.13;
+        pointer-events:none; user-select:none;
+    }
+    .stu-latest-subject-art svg {
+        display:block; width:100%; height:100%;
+        fill:none; stroke:#fff; stroke-width:3.1;
+        stroke-linecap:round; stroke-linejoin:round;
     }
     .stu-latest-grade {
         text-align:center; font-family:Roboto,Arial,sans-serif;
@@ -520,18 +556,11 @@
 
 <div id="login-screen" style="text-align:center; margin-top:80px;">
     <h2 style="color:var(--p); margin-bottom:20px;">Maktab Tizimi</h2>
-    <div style="display:inline-flex; gap:10px; margin-bottom:20px;">
-        <button id="lt-teacher" class="login-tab-btn active" onclick="switchLoginTab('teacher')">👨‍🏫 Ustoz</button>
-        <button id="lt-student" class="login-tab-btn" onclick="switchLoginTab('student')">👤 O'quvchi</button>
-    </div>
-    <div id="teacher-login-form">
-        <input type="text" id="t-name-input" class="gi" style="width:250px; height:45px; font-size: 16px; margin-bottom: 10px; font-weight:normal;" placeholder="Ismingizni kiriting..."> <br>
+    <div id="unified-login-form">
+        <div style="font-size:13px;color:#64748b;margin-bottom:10px;">Xodim yoki o‘quvchi login-paroli orqali kiring</div>
+        <input type="text" id="t-name-input" class="gi" style="width:250px; height:45px; font-size: 16px; margin-bottom: 10px; font-weight:normal;" placeholder="Login..." autocomplete="username"> <br>
+        <input type="password" id="t-pass-input" class="gi" style="width:250px; height:45px; font-size: 16px; margin-bottom: 10px; font-weight:normal;" placeholder="Parol..." autocomplete="current-password"> <br>
         <button onclick="login()" class="tab-btn active" style="width: 250px;">Kirish</button>
-    </div>
-    <div id="student-login-form" style="display:none;">
-        <input type="text" id="st-login-input" class="gi" style="width:250px; height:45px; font-size: 16px; margin-bottom: 10px; font-weight:normal;" placeholder="Login..."> <br>
-        <input type="password" id="st-pass-input" class="gi" style="width:250px; height:45px; font-size: 16px; margin-bottom: 10px; font-weight:normal;" placeholder="Parol..."> <br>
-        <button onclick="studentLogin()" class="tab-btn active" style="width: 250px;">Kirish</button>
     </div>
 </div>
 
@@ -579,6 +608,7 @@
         <button class="tab-btn" style="background:#ec4899; color:white; border:none;" onclick="openGroupsModal()">👥 Guruhlar</button>
         <button class="tab-btn" style="background:#0ea5e9; color:white; border:none;" onclick="openTeacherSchedule()">🗓 Ustoz jadvali</button>
         <button class="tab-btn" style="background:#0284c7; color:white; border:none;" onclick="openSettingsModal()">⚙️ Sozlama</button>
+        <button class="tab-btn teacher-audit-menu-btn" onclick="openTeacherGradeAudit()">🕒 Baholar tarixi</button>
         <input type="date" id="date-pick" class="gi" style="width:150px; height:38px" onchange="render()">
         <select id="c-select" class="gi" style="width:110px; height:38px" onchange="onClassChange()"></select>
         <select id="s-select" class="gi" style="width:160px; height:38px" onchange="onSubjectChange()"></select>
@@ -594,6 +624,40 @@
     </div>
 
     <div id="table-area" style="overflow-x: auto; border: 1px solid #ddd; border-radius: 10px;"></div>
+</div>
+
+<div id="teacher-grade-audit-modal" class="teacher-audit-overlay" role="dialog" aria-modal="true" aria-label="Mening baholarim tarixi">
+    <div class="teacher-audit-box">
+        <div class="teacher-audit-head">
+            <div>
+                <h2 style="margin:0;color:#4f46e5;font-size:20px;">🕒 Mening baholarim tarixi</h2>
+                <div id="teacher-audit-owner" style="font-size:12px;color:#64748b;margin-top:4px;"></div>
+            </div>
+            <button class="tab-btn" style="background:#fee2e2;color:#b91c1c;border:0;" onclick="closeTeacherGradeAudit()">✖ Yopish</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+            <button class="tab-btn" style="background:#0f766e;color:white;border:0;" onclick="teacherAuditExport('exportGradeAuditCSV')">📊 CSV</button>
+            <button class="tab-btn" style="background:#166534;color:white;border:0;" onclick="teacherAuditExport('exportGradeAuditExcel')">🟢 Excel</button>
+            <button class="tab-btn" style="background:#1d4ed8;color:white;border:0;" onclick="teacherAuditExport('exportGradeAuditWord')">🔵 Word</button>
+            <button class="tab-btn" style="background:#b91c1c;color:white;border:0;" onclick="teacherAuditExport('exportGradeAuditPDF')">🔴 PDF</button>
+            <button class="tab-btn" style="background:#9333ea;color:white;border:0;" onclick="teacherAuditExport('exportGradeAuditPPTX')">🟣 PowerPoint</button>
+        </div>
+        <div id="teacher-grade-audit-info" style="font-size:13px;color:#475569;margin-bottom:9px;"></div>
+        <div id="teacher-grade-audit-filters" style="display:flex;gap:8px;flex-wrap:wrap;padding:10px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;margin-bottom:10px;">
+            <select id="teacher-audit-class" class="gi" style="min-width:120px;flex:1;height:38px;"><option value="">Barcha sinflar</option></select>
+            <select id="teacher-audit-subject" class="gi" style="min-width:130px;flex:1;height:38px;"><option value="">Barcha fanlar</option></select>
+            <select id="teacher-audit-group" class="gi" style="min-width:120px;flex:1;height:38px;"><option value="">Barcha guruhlar</option></select>
+            <select id="teacher-audit-student" class="gi" style="min-width:140px;flex:1;height:38px;"><option value="">Barcha o‘quvchilar</option></select>
+            <select id="teacher-audit-action" class="gi" style="min-width:130px;flex:1;height:38px;"><option value="">Barcha amallar</option><option value="Qo‘yildi">Qo‘yildi</option><option value="O‘zgartirildi">O‘zgartirildi</option><option value="O‘chirildi">O‘chirildi</option></select>
+            <select id="teacher-audit-lesson-type" class="gi" style="min-width:130px;flex:1;height:38px;"><option value="">Barcha dars turlari</option></select>
+            <label style="font-size:12px;display:flex;align-items:center;gap:5px;">Dan: <input type="date" id="teacher-audit-from" class="gi" style="height:36px;"></label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:5px;">Gacha: <input type="date" id="teacher-audit-to" class="gi" style="height:36px;"></label>
+            <button type="button" class="tab-btn" onclick="resetTeacherGradeAuditFilters()" style="height:36px;">↺ Filtrlarni tozalash</button>
+        </div>
+        <div id="teacher-grade-audit-results" class="teacher-audit-table-wrap">
+            <div style="padding:18px;text-align:center;color:#64748b;">Baholar tarixi yuklanmoqda...</div>
+        </div>
+    </div>
 </div>
 
 <div id="student-content" class="main" style="display:none">
@@ -719,6 +783,33 @@
                     </div>
                 </div>
 
+                <div style="background:#eff6ff;border:1px solid #93c5fd;padding:15px;border-radius:10px;margin-bottom:20px;">
+                    <h3 style="margin-top:0;color:#1d4ed8;">🕒 Baholar tarixi va audit hisoboti</h3>
+                    <p style="font-size:12px;color:#475569;margin-top:0;">Baho qo‘yilgan, o‘zgartirilgan yoki o‘chirilgan vaqt; o‘quvchi, ustoz, sinf, fan, guruh va dars turi bo‘yicha.</p>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:8px;margin-bottom:10px;">
+                        <select id="audit-teacher" class="gi" style="width:100%;height:38px;"><option value="">Barcha o‘qituvchilar</option></select>
+                        <select id="audit-class" class="gi" style="width:100%;height:38px;"><option value="">Barcha sinflar</option></select>
+                        <select id="audit-subject" class="gi" style="width:100%;height:38px;"><option value="">Barcha fanlar</option></select>
+                        <select id="audit-group" class="gi" style="width:100%;height:38px;"><option value="">Barcha guruhlar</option></select>
+                        <select id="audit-student" class="gi" style="width:100%;height:38px;"><option value="">Barcha o‘quvchilar</option></select>
+                        <select id="audit-action" class="gi" style="width:100%;height:38px;"><option value="">Barcha amallar</option><option value="qo‘yildi">Qo‘yildi</option><option value="o‘zgartirildi">O‘zgartirildi</option><option value="o‘chirildi">O‘chirildi</option></select>
+                        <select id="audit-lesson-type" class="gi" style="width:100%;height:38px;"><option value="">Barcha dars turlari</option></select>
+                        <label style="font-size:12px;color:#475569;">Boshlanish sanasi<input id="audit-from" type="date" class="gi" style="width:100%;height:36px;"></label>
+                        <label style="font-size:12px;color:#475569;">Tugash sanasi<input id="audit-to" type="date" class="gi" style="width:100%;height:36px;"></label>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                        <button class="tab-btn" style="background:#2563eb;color:white;border:0;" onclick="renderGradeAudit()">🔎 Tanlanganlar bo‘yicha qidirish</button>
+                        <button class="tab-btn" style="background:#64748b;color:white;border:0;" onclick="resetGradeAuditFilters()">↺ Tozalash</button>
+                        <button class="tab-btn" style="background:#0f766e;color:white;border:0;" onclick="exportGradeAuditCSV()">📊 CSV</button>
+                        <button class="tab-btn" style="background:#166534;color:white;border:0;" onclick="exportGradeAuditExcel()">🟢 Excel</button>
+                        <button class="tab-btn" style="background:#1d4ed8;color:white;border:0;" onclick="exportGradeAuditWord()">🔵 Word</button>
+                        <button class="tab-btn" style="background:#b91c1c;color:white;border:0;" onclick="exportGradeAuditPDF()">🔴 PDF</button>
+                        <button class="tab-btn" style="background:#9333ea;color:white;border:0;" onclick="exportGradeAuditPPTX()">🟣 PowerPoint</button>
+                    </div>
+                    <div id="audit-history-info" style="font-size:12px;color:#475569;margin-bottom:8px;">Eski saqlangan audit yozuvlari ham Firebase’dan yuklanadi.</div>
+                    <div id="grade-audit-results" style="max-height:480px;overflow:auto;background:white;border:1px solid #dbeafe;border-radius:8px;padding:8px;"><div style="padding:12px;background:#eff6ff;color:#1e3a8a;font-weight:800;border-radius:6px;margin-bottom:8px;">Jadval ustun nomlari yuqorida ko‘k sarlavhada doim ko‘rinib turadi. Yon tomonga surib qolgan ustunlarni ham ko‘rishingiz mumkin.</div></div>
+                </div>
+
                 <div style="background:#e0f2fe; border:1px solid #7dd3fc; padding:15px; border-radius:10px; margin-bottom:20px;">
                     <h3 style="margin-top:0; color:#075985;">🔑 O'quvchi akkauntlari</h3>
                     <div style="display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
@@ -778,13 +869,15 @@
                     <div id="mark-codes-list" style="background:white;border:1px solid #fed7aa;border-radius:6px;padding:10px;max-height:260px;overflow-y:auto;"></div>
                 </div>
 
+
+
                 <div style="background:#f3e8ff; border:1px solid #d8b4fe; padding:15px; border-radius:10px; margin-bottom:20px;">
                     <h3 style="margin-top:0; color:#6b21a8;">👑 Adminlar boshqaruvi</h3>
                     <div style="display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; align-items:flex-start;">
-                        <input type="text" id="new-admin-name" class="gi" style="width:180px; height:38px; text-align:left; font-weight:normal;" placeholder="Admin ismi (F.I.Sh)">
+                        <input type="text" id="new-admin-employee-number" class="gi" style="width:105px;height:38px;text-align:left;font-weight:normal;" placeholder="Xodim №"><input type="text" id="new-admin-name" class="gi" style="width:180px; height:38px; text-align:left; font-weight:normal;" placeholder="Admin ismi (F.I.Sh)">
                         <div style="flex:1; min-width:150px;">
                             <div style="font-size:10px; font-weight:bold; color:#6b21a8; margin-bottom:2px;">Sinflar (Ctrl bilan tanlang)</div>
-                            <select id="new-admin-classes" class="gi" style="width:100%; height:60px; text-align:left; font-weight:normal;" multiple></select>
+                            <select id="new-admin-classes" class="gi" style="width:100%; height:60px; text-align:left; font-weight:normal;" multiple onchange="renderAdminScopeOptions()"></select>
                         </div>
                         <div style="flex:1; min-width:150px;">
                             <div style="font-size:10px; font-weight:bold; color:#6b21a8; margin-bottom:2px;">Fanlar (Ctrl bilan tanlang)</div>
@@ -802,9 +895,35 @@
                             <div style="font-size:10px; font-weight:bold; color:#6b21a8; margin-bottom:2px;">Dars turlari</div>
                             <select id="new-admin-lessontypes" class="gi" style="width:100%; height:60px; text-align:left; font-weight:normal;" multiple></select>
                         </div>
-                        <button class="tab-btn" style="background:#8b5cf6; color:white; border:none; height:60px; margin-top:12px;" onclick="addAdmin()">➕ Qo'shish</button>
+                        <div style="display:flex;flex-direction:column;gap:5px;margin-top:12px;">
+                            <button class="tab-btn" style="background:#0f766e;color:white;border:none;height:27px;font-size:11px;" onclick="selectAllAdminPermissions()">☑ Barchasi</button>
+                            <button class="tab-btn" style="background:#8b5cf6;color:white;border:none;height:27px;font-size:11px;" onclick="addAdmin()">➕ Qo'shish</button>
+                        </div>
                     </div>
                     <div id="admins-list-container" style="background:white; border:1px solid #e2e8f0; border-radius:6px; padding:10px; max-height:300px; overflow-y:auto;"></div>
+                </div>
+
+                <div style="background:#ecfdf5;border:1px solid #a7f3d0;padding:15px;border-radius:10px;margin-bottom:20px;">
+                    <h3 style="margin-top:0;color:#047857;">👥 Xodimlar boshqaruvi</h3>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+                        <input id="new-employee-name" class="gi" style="width:190px;height:38px;text-align:left;font-weight:normal;" placeholder="Ism familiya">
+                        <input id="new-employee-login" class="gi" style="width:145px;height:38px;text-align:left;font-weight:normal;" placeholder="Login">
+                        <input id="new-employee-pass" type="text" class="gi" style="width:145px;height:38px;text-align:left;font-weight:normal;" placeholder="Parol">
+                        <button class="tab-btn" style="background:#059669;color:white;border:0;height:38px;" onclick="addEmployee()">➕ Xodim qo‘shish</button>
+                    </div>
+                    <div style="font-size:12px;color:#065f46;margin-bottom:8px;">Xodim tartib raqami avtomatik beriladi. Sinf, fan, guruh yoki sana biriktirish joyiga shu raqamni yozing.</div>
+                    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;margin-bottom:10px;">
+                        <b style="display:block;color:#166534;font-size:13px;margin-bottom:7px;">🔎 Xodimni qidirish</b>
+                        <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">
+                            <input id="employee-search-number" class="gi" style="width:105px;height:36px;text-align:left;font-weight:normal;" placeholder="Tartib №" onkeydown="if(event.key==='Enter')searchEmployees()">
+                            <input id="employee-search-login" class="gi" style="width:140px;height:36px;text-align:left;font-weight:normal;" placeholder="Login" onkeydown="if(event.key==='Enter')searchEmployees()">
+                            <input id="employee-search-password" class="gi" style="width:140px;height:36px;text-align:left;font-weight:normal;" placeholder="Parol" onkeydown="if(event.key==='Enter')searchEmployees()">
+                            <button class="tab-btn" style="background:#047857;color:white;border:0;height:36px;" onclick="searchEmployees()">🔍 Qidirish</button>
+                            <button class="tab-btn" style="background:#e2e8f0;color:#334155;border:0;height:36px;" onclick="clearEmployeeSearch()">Tozalash</button>
+                        </div>
+                        <div id="employee-search-results" style="margin-top:8px;font-size:12px;"></div>
+                    </div>
+                    <div id="employees-list-container" style="background:white;border:1px solid #a7f3d0;border-radius:6px;padding:10px;max-height:300px;overflow-y:auto;"></div>
                 </div>
 
                 <div style="background:#f0f7ff; border:1px solid #b6d4fe; padding:15px; border-radius:10px; margin-bottom:20px;">
@@ -865,7 +984,7 @@
                             <label style="font-size:12px;font-weight:700;">Guruh<select id="assign-teacher-group" class="gi" style="width:100%;height:38px;display:block;" onchange="loadDateTeacherAssignDates()"></select></label>
                             <label style="font-size:12px;font-weight:700;">Sana<select id="assign-teacher-date" class="gi" style="width:100%;height:38px;display:block;" onchange="loadDateTeacherAssignLessonTypes()"></select></label>
                             <label style="font-size:12px;font-weight:700;">Dars turi<select id="assign-teacher-lesson-type" class="gi" style="width:100%;height:38px;display:block;" onchange="renderDateTeacherAssignments()"></select></label>
-                            <label style="font-size:12px;font-weight:700;">Ustoz F.I.Sh<input id="assign-teacher-name" type="text" class="gi" style="width:100%;height:38px;display:block;box-sizing:border-box;text-align:left;" placeholder="Ustoz ismini kiriting"></label>
+                            <label style="font-size:12px;font-weight:700;">Ustoz F.I.Sh<input id="assign-teacher-name" type="text" class="gi" style="width:100%;height:38px;display:block;box-sizing:border-box;text-align:left;" placeholder="Xodim № yoki F.I.Sh"></label>
                             <button class="tab-btn" style="width:100%;background:#2563eb;color:white;border:0;height:40px;" onclick="saveDateTeacherAssignment()">💾 Biriktirish</button>
                         </div>
                         <div id="date-teacher-assignments-list" style="margin-top:10px;background:white;border:1px solid #dbeafe;border-radius:7px;padding:8px;width:100%;box-sizing:border-box;"></div>
@@ -944,17 +1063,33 @@
                     </div>
                     <div style="display:flex; gap:15px; flex-wrap:wrap; margin-top:15px;">
                         <div style="flex:1; min-width:320px; background:white; padding:10px; border-radius:8px;">
-                            <h4 style="margin:0 0 8px 0; font-size:13px; color:var(--p);">Kataklarni qulflash</h4>
+                            <h4 style="margin:0 0 8px 0; font-size:13px; color:var(--p);">O‘quvchi kataklarini sanagacha qulflash</h4>
                             <select id="lock-cell-q-select" class="gi" style="width:120px; height:32px; margin-bottom:8px;" onchange="loadLockCellsList()"></select>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px;">
+                                <select id="lock-cell-student-select" class="gi" style="min-width:145px;height:34px;" onchange="loadLockCellsList()"><option value="__all">Barcha o‘quvchilar</option></select>
+                                <select id="lock-cell-group-select" class="gi" style="min-width:130px;height:34px;" onchange="loadLockCellsList()"><option value="-1">Barcha guruhlar</option></select>
+                            </div>
+                            <select id="lock-cell-subjects" class="gi" multiple size="4" style="width:100%;min-height:76px;margin-bottom:7px;" title="Bir yoki bir nechta fanni tanlang"></select>
+                            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                                <label style="font-size:11px;font-weight:700;">Qaysi sanagacha:</label>
+                                <input type="date" id="lock-cell-until-date" class="gi" style="height:32px;width:145px;">
+                                <button type="button" class="tab-btn" style="background:#ef4444;color:white;border:none;padding:6px 9px;" onclick="applyStudentCellLocksUntil()">🔒 Qulflash</button>
+                                <button type="button" class="tab-btn" style="background:#16a34a;color:white;border:none;padding:6px 9px;" onclick="unlockStudentCellLocksUntil()">🔓 Ochish</button>
+                            </div>
+                            <div id="lock-cell-until-status" style="font-size:11px;color:#64748b;margin:6px 0;"></div>
                             <div id="lock-cells-students-list" style="max-height:180px; overflow-y:auto;"></div>
                         </div>
                         <div style="flex:1; min-width:300px; background:white; padding:10px; border-radius:8px;">
-                            <h4 style="margin:0 0 8px 0; font-size:13px; color:var(--p);">Sana ustozlari</h4>
+                            <h4 style="margin:0 0 8px 0; font-size:13px; color:var(--p);">Sana / guruh bo‘yicha qulflash</h4>
                             <select id="lock-q-select" class="gi" style="width:120px; height:32px; margin-bottom:8px;" onchange="loadLockDatesList()"></select>
+                            <select id="lock-date-group-select" class="gi" style="width:150px;height:32px;margin-bottom:8px;" onchange="loadLockDatesList()"><option value="-1">Barcha guruhlar</option></select>
+                            <label style="display:block;font-size:11px;font-weight:700;margin:2px 0 5px;">Qulflanadigan fanlar (bir nechta tanlash mumkin):</label>
+                            <select id="lock-date-subjects" class="gi" multiple size="4" style="width:100%;min-height:76px;margin-bottom:7px;" title="Bir yoki bir nechta fanni tanlang"></select>
                             <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:4px 0 10px;">
                                 <label style="font-size:12px;font-weight:700;">Qaysi sanagacha:</label>
                                 <input type="date" id="lock-until-date" class="gi" style="height:34px;width:150px;">
-                                <button type="button" class="tab-btn" style="background:#ef4444;color:white;border:none;padding:7px 11px;" onclick="applyLockUntilDate()">🔒 Bajarish</button>
+                                <button type="button" class="tab-btn" style="background:#ef4444;color:white;border:none;padding:7px 11px;" onclick="applyLockUntilDate()">🔒 Qulflash</button>
+                                <button type="button" class="tab-btn" style="background:#16a34a;color:white;border:none;padding:7px 11px;" onclick="unlockLockUntilDate()">🔓 Ochish</button>
                             </div>
                             <div id="lock-until-status" style="font-size:11px;color:#64748b;margin-bottom:7px;"></div>
                             <div id="lock-dates-list" style="max-height:160px; overflow-y:auto;"></div>
@@ -1009,13 +1144,13 @@
   </div>
 </div>
 
-<div id="student-lesson-modal" class="lt-modal-overlay" style="display:none; z-index: 10001;">
-  <div class="lt-modal-box" style="max-width:550px; padding:0; overflow:hidden;">
-    <div style="display:flex; justify-content:space-between; align-items:center; padding:15px 20px; background:#f8fafc; border-bottom:1px solid #e2e8f0;">
-        <h3 style="margin:0; color:#1e293b;">Dars</h3>
-        <button class="tab-btn" style="background:transparent; color:#4361ee; font-weight:bold; padding:5px 10px; border:none; font-size:14px;" onclick="closeStudentLessonModal()">Yopish</button>
+<div id="student-lesson-modal" class="lt-modal-overlay" style="display:none; z-index:10001; align-items:stretch; justify-content:stretch; padding:0;">
+  <div class="lt-modal-box" style="max-width:none; width:100%; height:100%; max-height:100vh; margin:0; padding:0; border-radius:0; overflow-y:auto; box-shadow:none;">
+    <div style="position:sticky; top:0; z-index:5; display:flex; justify-content:center; align-items:center; min-height:64px; padding:10px 16px; border-bottom:0; background:#fff;">
+      <h3 style="margin:0; color:#111; font-size:20px; font-weight:400;">Dars</h3>
+      <button class="tab-btn" style="position:absolute; right:14px; top:50%; transform:translateY(-50%); background:transparent; color:#1685a2; font-weight:500; padding:8px 4px; border:none; font-size:16px;" onclick="closeStudentLessonModal()">Yopish</button>
     </div>
-    <div id="student-lesson-modal-body" style="padding:20px; max-height:80vh; overflow-y:auto;"></div>
+    <div id="student-lesson-modal-body" style="padding:0 20px 24px; max-height:none; min-height:calc(100vh - 64px); overflow-y:visible; background:#edf1f7;"></div>
   </div>
 </div>
 
@@ -1130,6 +1265,18 @@
     function hEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
     function jEsc(s) { return hEsc(s).replace(/'/g, "\\'"); }
     function lockTrue(v) { return v === true || v === 'true' || v === 1 || v === '1'; }
+    function isDateLocked(lockObj, sub, q, dIdx, groupIdx) {
+        const b = lockObj?.dates?.[sub]?.[q] || {};
+        if (Number(groupIdx) >= 0 && lockTrue(b.groups?.[String(Number(groupIdx))]?.[dIdx])) return true;
+        if (Number(groupIdx) < 0 && b.groups && Object.values(b.groups).some(g => lockTrue(g?.[dIdx]))) return true;
+        return lockTrue(b[dIdx]);
+    }
+    function isCellLocked(lockObj, studentKey, sub, q, dIdx, groupIdx) {
+        const b = lockObj?.cells?.[studentKey]?.[sub]?.[q] || {};
+        if (Number(groupIdx) >= 0 && lockTrue(b.groups?.[String(Number(groupIdx))]?.[dIdx])) return true;
+        if (Number(groupIdx) < 0 && b.groups && Object.values(b.groups).some(g => lockTrue(g?.[dIdx]))) return true;
+        return lockTrue(b[dIdx]);
+    }
     function lsGet(k, fb) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch(e) { return fb; } }
     function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
 
@@ -1191,6 +1338,8 @@
     window.syncRoomsToFirebase         = (data)         => fbWrite('rooms/', data);
     window.syncClassShiftsToFirebase   = (data)         => fbWrite('class_shifts/', data);
     window.syncAdminsListToFirebase    = (data)         => fbWrite('admins_list/', data);
+    window.syncEmployeesToFirebase     = (data)         => fbWrite('employees_list/', data);
+    window.syncGradeAuditToFirebase    = (data)         => fbWrite('grade_audit/', data);
 
     const DEFAULT_BELL_MORNING = [
         { start: '08:00', end: '08:45' }, { start: '08:50', end: '09:35' },
@@ -1329,10 +1478,20 @@
     }
     function saveQuarters(arr) { const s = getQuarterSettings(); s.quarters = arr; saveQuarterSettings(s); }
     function getQuarterName(q) { const quarters = getQuarters(); const f = quarters.find(x => x.id === q); return (f && f.name) ? f.name : (DEFAULT_QUARTER_NAMES[q] || q); }
+    // Admin AUTO tanlasa, o‘quvchi choragi bugungi sana bo‘yicha aniqlanadi.
+    // Admin aniq chorakni tanlasa, shu o‘quvchi uchun qo‘lda belgilangan chorak ishlatiladi.
     function getStudentQuarter(cls, name) {
+        const quarters = getQuarters();
         const st = getQuarterSettings().students;
-        if (st && st[cls] && st[cls][name]) return st[cls][name];
-        const q = getQuarters(); return q[0] ? q[0].id : 'Q1';
+        const assigned = st && st[cls] ? st[cls][name] : 'AUTO';
+        if (assigned && assigned !== 'AUTO' && quarters.some(q => q.id === assigned)) return assigned;
+
+        const today = isoOfDate(new Date());
+        const currentQuarter = quarters.find(q =>
+            q && q.start && q.end && today >= String(q.start).slice(0, 10) && today <= String(q.end).slice(0, 10)
+        );
+        if (currentQuarter) return currentQuarter.id;
+        return quarters[0] ? quarters[0].id : 'Q1';
     }
     function validateActiveQuarter() {
         const vis = getQuarters().filter(q => q.visible !== false);
@@ -1372,7 +1531,48 @@
     function markKey(q, cls, sub) { return `marks_${q}_${cls}_${sub}`; }
     function getMarksByKey(key) { if (window.__marksCache && window.__marksCache[key]) return window.__marksCache[key]; return lsGet(key, {}); }
     function getMarks(q, cls, sub) { return getMarksByKey(markKey(q, cls, sub)); }
+    function gradeAuditValue(v) { return v == null ? '' : String(v); }
+    function writeGradeAudit(q, cls, sub, before, after) {
+        const log = lsGet('grade_audit', {}) || {};
+        const ctx = window.__gradeAuditContext || {};
+        const now = Date.now();
+        const studentNames = getStudentsListObj()[cls] || [];
+        const keyToName = {};
+        studentNames.forEach(n => { keyToName[getStudentKeyByName(cls, n)] = n; });
+        const allStudents = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+        allStudents.forEach(sk => {
+            const a = before?.[sk] || {}, b = after?.[sk] || {};
+            const fields = new Set([...Object.keys(a), ...Object.keys(b)]);
+            fields.forEach(field => {
+                if (field === '__meta' || field.startsWith('__')) return;
+                const oldV = gradeAuditValue(a[field]), newV = gradeAuditValue(b[field]);
+                if (oldV === newV) return;
+                const lessonType = field.includes('__lt_') ? field.split('__lt_').slice(1).join('__lt_') : '';
+                const datePart = field.split('__lt_')[0];
+                const eventId = `${now}_${Math.random().toString(36).slice(2,9)}`;
+                const action = !oldV ? 'qo‘yildi' : (!newV ? 'o‘chirildi' : 'o‘zgartirildi');
+                log[eventId] = {
+                    timestamp: now, action,
+                    placedAt: action === 'qo‘yildi' ? now : null,
+                    editedAt: action === 'o‘zgartirildi' ? now : null,
+                    deletedAt: action === 'o‘chirildi' ? now : null,
+                    teacher: ctx.teacher || teacher || 'Noma’lum',
+                    className: String(cls), subject: String(sub), group: ctx.group || '',
+                    student: keyToName[sk] || sk, quarter: String(q),
+                    lessonDate: datePart, lessonType: lessonType || 'Asosiy baho',
+                    oldValue: oldV, newValue: newV
+                };
+            });
+        });
+        lsSet('grade_audit', log);
+        if (window.syncGradeAuditToFirebase) window.syncGradeAuditToFirebase(log);
+    }
+
     function saveMarksObj(q, cls, sub, o) {
+        const auditKey = markKey(q, cls, sub);
+        const oldMarks = window.__gradeAuditBefore || JSON.parse(JSON.stringify(getMarksByKey(auditKey) || {}));
+        window.__gradeAuditBefore = null;
+        writeGradeAudit(q, cls, sub, oldMarks, o);
         o.__ts = Date.now();
         const key = markKey(q, cls, sub);
         window.__marksCache[key] = o;
@@ -1574,13 +1774,18 @@
         else { lsSet(key, arr); window.syncToFirebase(key, arr); }
     }
     function removeLessonTypeFromColumnArray(cls, sub, q, dIdx, shortName, groupIdx) {
+        groupIdx = Number.isInteger(Number(groupIdx)) ? Number(groupIdx) : -1;
         if (!canManageLessonTypesForColumn(cls, sub, q, dIdx, groupIdx)) {
-            alert('Bu ustun yopilgan yoki boshqa ustozga biriktirilgan. Dars turini o‘chirib bo‘lmaydi.');
+            alert('Bu sinf, fan, guruh yoki sana sizga biriktirilmagan. Dars turini o‘chirish mumkin emas.');
             return;
         }
         let arr = getLessonTypesForColumn(cls, sub, q, dIdx, groupIdx);
+        if (!arr.includes(shortName)) return;
         arr = arr.filter(s => s !== shortName);
         setLessonTypesForColumn(cls, sub, q, dIdx, arr, groupIdx);
+        closeLessonContextMenu();
+        render();
+        showSaved();
     }
 
     function isoOfDate(dt) { return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0'); }
@@ -1802,44 +2007,66 @@
         if (typeof window.renderClassShiftsUI === 'function') window.renderClassShiftsUI();
     };
 
-    function switchLoginTab(which) {
-        const isT = which === 'teacher';
-        document.getElementById('lt-teacher').classList.toggle('active', isT);
-        document.getElementById('lt-student').classList.toggle('active', !isT);
-        document.getElementById('teacher-login-form').style.display = isT ? 'block' : 'none';
-        document.getElementById('student-login-form').style.display = isT ? 'none' : 'block';
-    }
+    function switchLoginTab(which) { /* yagona kirish oynasi */ }
     function login() {
-        const v = document.getElementById('t-name-input').value.trim();
-        if (!v) return alert("Ismingizni kiriting!");
-        teacher = v; localStorage.setItem('loggedTeacher', teacher);
-        localStorage.removeItem('loggedStudent');
-        loggedStudent = null;
-        showMain();
-    }
-    window.studentLogin = function() {
-        const lg = document.getElementById('st-login-input').value.trim();
-        const pw = document.getElementById('st-pass-input').value;
-        if (!lg || !pw) return alert("To'ldiring!");
+        const loginValue = document.getElementById('t-name-input').value.trim();
+        const password = document.getElementById('t-pass-input')?.value || '';
+        if (!loginValue || !password) return alert("Login va parolni kiriting!");
+
+        // Xodim va o‘quvchi faqat login VA parol juftligi ikkalasi ham aynan bir xil bo‘lsa to‘qnashadi.
+        const employees = lsGet('employees_list', []) || [];
+        const studentAccountsForLogin = lsGet('student_accounts', {}) || {};
+        for (const c in studentAccountsForLogin) for (const n in (studentAccountsForLogin[c] || {})) {
+            const a=studentAccountsForLogin[c][n]; if(!a) continue;
+            const sameLogin=String(a.login||'').trim().toLowerCase()===loginValue.toLowerCase();
+            const samePassword=String(a.password||'').trim()===String(password).trim();
+            if(employees.some(e=>sameLogin && samePassword && String(e.login||'').trim().toLowerCase()===loginValue.toLowerCase() && String(e.password||'').trim()===String(password).trim()))
+                return alert('Bu login va parol juftligi xodim hamda o‘quvchida bir xil. Kirish amalga oshmadi. Login yoki paroldan bittasini o‘zgartiring.');
+        }
+        const employee = employees.find(e => String(e.login || '').trim().toLowerCase() === loginValue.toLowerCase() && String(e.password || '') === password);
+        if (employee) {
+            teacher = String(employee.name || '').trim();
+            localStorage.setItem('loggedTeacher', teacher);
+            localStorage.setItem('loggedEmployeeId', String(employee.number || employee.id || ''));
+            localStorage.removeItem('loggedStudent');
+            loggedStudent = null;
+            showMain();
+            return;
+        }
+
+        // Xodim topilmasa, shu oynada o‘quvchi akkaunti tekshiriladi.
         const all = lsGet('student_accounts', {});
         let found = null;
         for (const c in all) {
             const clsObj = all[c]; if (!clsObj || typeof clsObj !== 'object') continue;
             for (const n in clsObj) {
                 const a = clsObj[n];
-                if (a && a.login === lg && a.password === pw) { found = { cls: c, name: n, subjects: Array.isArray(a.subjects) ? a.subjects : [] }; break; }
+                if (a && String(a.login || '') === loginValue && String(a.password || '') === password) {
+                    found = { cls: c, name: n, subjects: Array.isArray(a.subjects) ? a.subjects : [] };
+                    break;
+                }
             }
             if (found) break;
         }
-        if (!found) return alert("Login yoki parol noto'g'ri!");
-        loggedStudent = found; localStorage.setItem('loggedStudent', JSON.stringify(found));
-        localStorage.removeItem('loggedTeacher'); teacher = "";
-        showStudentView();
-    };
-    function logout() { localStorage.removeItem('loggedTeacher'); location.reload(); }
+        if (found) {
+            loggedStudent = found;
+            localStorage.setItem('loggedStudent', JSON.stringify(found));
+            localStorage.removeItem('loggedTeacher');
+            localStorage.removeItem('loggedEmployeeId');
+            teacher = "";
+            showStudentView();
+            return;
+        }
+        alert("Login yoki parol noto‘g‘ri!");
+    }
+    window.studentLogin = login;
+    function logout() { localStorage.removeItem('loggedTeacher'); localStorage.removeItem('loggedEmployeeId'); location.reload(); }
     window.studentLogout = function() { localStorage.removeItem('loggedStudent'); location.reload(); };
 
     document.addEventListener("DOMContentLoaded", () => {
+        const teacherAuditModal = document.getElementById('teacher-grade-audit-modal');
+        if (teacherAuditModal) teacherAuditModal.addEventListener('click', e => { if (e.target === teacherAuditModal) closeTeacherGradeAudit(); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTeacherGradeAudit(); });
         if (loggedStudent) showStudentView();
         else if (teacher) showMain();
         document.getElementById('weekly-controls').style.display = 'none';
@@ -1886,7 +2113,8 @@
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('student-content').style.display = 'none';
         document.getElementById('main-content').style.display = 'block';
-        document.getElementById('t-welcome').innerText = "👨‍🏫 " + teacher;
+        const empId = localStorage.getItem('loggedEmployeeId');
+        document.getElementById('t-welcome').innerText = "👨‍💼 " + teacher + (empId ? "  ·  Xodim №" + empId : "");
         window.reloadClassSelects();
         if (localStorage.getItem('last_selected_date')) document.getElementById('date-pick').value = localStorage.getItem('last_selected_date');
         else document.getElementById('date-pick').value = isoOfDate(new Date());
@@ -1940,6 +2168,7 @@
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('main-content').style.display = 'none';
         document.getElementById('student-content').style.display = 'block';
+        document.title = loggedStudent.name || 'O‘quvchi';
         localStorage.removeItem('student_view_date');
         renderStudentView();
     };
@@ -1992,6 +2221,16 @@
         if (!teacher) { body.innerHTML = '<p style="text-align:center; color:#ef4444;">Avval ustoz sifatida kiring.</p>'; return; }
 
         const tName = teacher.trim();
+        const loggedNo = String(localStorage.getItem('loggedEmployeeId') || '').trim();
+        const normGrant = value => String(value || '').trim().toLocaleLowerCase('uz');
+        const scheduleAdminGrant = getAdminsList().find(a =>
+            (loggedNo && a.employeeNumber && String(a.employeeNumber) === loggedNo) ||
+            (tName && normGrant(a.name) === normGrant(tName))
+        );
+        const grantHas = (stored, value) => {
+            const list = String(stored || '').split(',').map(normGrant).filter(Boolean);
+            return !list.length || list.includes(normGrant(value));
+        };
         const classes = getClassesList();
         const startDate = new Date(sIso + 'T00:00:00');
         const endDate = new Date(eIso + 'T00:00:00');
@@ -2056,8 +2295,43 @@
                         return !!dtT[groupDateTeacherKey(cls,l.name,q,realIdx,gi)] || types.some(lt => !!dtT[groupDateTeacherKey(cls,l.name,q,realIdx,gi,lt)]);
                     });
                     const isGroupTeacher = myGroups.length > 0;
-                    const hasFullAccess = !hasGroupAssignments && (isOverrideTeacher || isMainTeacher);
+                    let hasFullAccess = !hasGroupAssignments && (isOverrideTeacher || isMainTeacher);
                     let myLesson = allGroups.length ? (isGroupTeacher || (!hasGroupAssignments && (isOverrideTeacher || isMainTeacher))) : (isOverrideTeacher || isMainTeacher);
+
+                    // Admin bo‘limida xodimga berilgan sinf/fan/guruh/sana ruxsatlari
+                    // shaxsiy jadvalda ham ko‘rinadi; sana qulflangan bo‘lsa ko‘rsatilmaydi.
+                    if (scheduleAdminGrant && grantHas(scheduleAdminGrant.classes, cls) &&
+                        grantHas(scheduleAdminGrant.subjects, l.name) && grantHas(scheduleAdminGrant.dates, day.iso)) {
+                        const allowedTypes = String(scheduleAdminGrant.lessontypes || '').split(',').map(normGrant).filter(Boolean);
+                        const groupRestrictions = String(scheduleAdminGrant.groups || '').split(',').map(normGrant).filter(Boolean);
+                        const adminGroups = [];
+                        if (allGroups.length) {
+                            allGroups.forEach((g, gi) => {
+                                if (!g || (groupRestrictions.length && !groupRestrictions.includes(normGrant(g.name)))) return;
+                                const typeList = getLessonTypesForColumn(cls, l.name, q, realIdx, gi);
+                                const visibleTypes = (typeList.length ? typeList : ['']).filter(lt => !allowedTypes.length || allowedTypes.includes(normGrant(lt)));
+                                if (allowedTypes.length && !visibleTypes.length) return;
+                                const access = getEmployeeJournalGrant(cls, l.name, gi, day.iso);
+                                if (!access.allowed) return;
+                                adminGroups.push({ name:g.name || ('Guruh '+(gi+1)), idx:gi, lessonTypes:visibleTypes.filter(Boolean) });
+                            });
+                            if (groupRestrictions.length) {
+                                myGroups.splice(0, myGroups.length, ...adminGroups);
+                                hasFullAccess = false;
+                                myLesson = adminGroups.length > 0;
+                            } else {
+                                const fullAccess = getEmployeeJournalGrant(cls, l.name, -1, day.iso);
+                                if (fullAccess.allowed) {
+                                    myGroups.splice(0, myGroups.length, ...adminGroups);
+                                    hasFullAccess = true;
+                                    myLesson = true;
+                                }
+                            }
+                        } else {
+                            const fullAccess = getEmployeeJournalGrant(cls, l.name, -1, day.iso);
+                            if (fullAccess.allowed) { hasFullAccess = true; myLesson = true; }
+                        }
+                    }
                     if (!myLesson) return;
 
                     const slot = idx + 1;
@@ -2161,8 +2435,49 @@
         </div>` + html;
     };
 
+    function getEmployeeJournalGrant(cls, sub, groupIdx, dateIso) {
+        const current = String(teacher || localStorage.getItem('loggedTeacher') || '').trim();
+        const empNo = String(localStorage.getItem('loggedEmployeeId') || '').trim();
+        const norm = value => String(value || '').trim().toLocaleLowerCase('uz');
+        const grant = getAdminsList().find(a =>
+            (empNo && a.employeeNumber && String(a.employeeNumber) === empNo) ||
+            (current && norm(a.name) === norm(current))
+        );
+        if (!grant) return { found:false, allowed:true };
+        const matches = (stored, value) => {
+            const values = String(stored || '').split(',').map(norm).filter(Boolean);
+            return !values.length || values.includes(norm(value));
+        };
+        const groupList = lsGet(`groups_${cls}_${sub}`, []) || [];
+        const gi = groupIdx === null || groupIdx === undefined || groupIdx === '' ? -1 : Number(groupIdx);
+        const groupName = gi >= 0 && groupList[gi] ? groupList[gi].name : '';
+        const scopeOK = matches(grant.classes, cls) && matches(grant.subjects, sub) &&
+            matches(grant.groups, groupName) && matches(grant.dates, dateIso || '');
+        if (!scopeOK) return { found:true, allowed:false, reason:'Sizga bu sinf, fan, guruh yoki sana uchun jurnalga kirish ruxsati berilmagan.' };
+
+        // Admin ruxsati qulflangan sanani ochib bermaydi.
+        if (dateIso) {
+            const locks = (lsGet('lock_settings', {}) || {})[cls] || {};
+            let locked = false;
+            for (const q of getQuarters()) {
+                if (!q || !q.start || !q.id) continue;
+                const start = new Date(q.start + 'T00:00:00');
+                const target = new Date(dateIso + 'T00:00:00');
+                const idx = Math.round((target - start) / 86400000);
+                if (idx >= 0 && idx < 200) {
+                    if (isDateLocked(locks, sub, q.id, idx, gi)) locked = true;
+                    break;
+                }
+            }
+            if (locked) return { found:true, allowed:false, reason:'Bu sana jurnalda qulflangan. Admin ruxsati ham qulflangan sanani ochmaydi.' };
+        }
+        return { found:true, allowed:true };
+    }
+
     window.gotoJournal = function(cls, sub, groupIdx, dateIso) {
         try {
+            const access = getEmployeeJournalGrant(cls, sub, groupIdx, dateIso);
+            if (!access.allowed) { alert(access.reason); return; }
             if (typeof closeTeacherSchedule === 'function') closeTeacherSchedule();
             const cSel = document.getElementById('c-select');
             if (!cSel) return;
@@ -2695,7 +3010,7 @@
                 <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:6px;">
                     <span style="font-weight:bold; min-width:150px; font-size:13px;">${i+1}. ${hEsc(name)}${badge}</span>
                     <input type="text" class="gi" style="width:130px; height:32px; font-size:12px; font-weight:normal; text-align:left;" placeholder="Login" value="${hEsc(acc.login||'')}" onchange="setStudentLogin('${jEsc(name)}', this.value)">
-                    <input type="text" class="gi" style="width:130px; height:32px; font-size:12px; font-weight:normal; text-align:left;" placeholder="Parol" value="${hEsc(acc.password||'')}" onchange="setStudentPassword('${jEsc(name)}', this.value)">
+                    <input type="text" class="gi" style="width:130px; height:32px; font-size:12px; font-weight:normal; text-align:left;" placeholder="Parol" value="${hEsc(acc.password||'')}" onchange="setStudentPassword('${jEsc(name)}', this.value, this)">
                 </div>
                 <div style="font-size:11px; color:#64748b; font-weight:bold; margin-bottom:4px;">Fanlar:</div>
                 <div>${subChecks}</div>
@@ -2703,20 +3018,64 @@
         });
         cont.innerHTML = html;
     };
+    function allStudentLoginOwners(excludeClass, excludeName) {
+        const all = getStudentAccounts(); const out = [];
+        for (const c in all) for (const n in (all[c] || {})) {
+            const a = all[c][n];
+            if (a && (a.login || a.password) && !(c === excludeClass && n === excludeName)) out.push({login:String(a.login||'').trim(), password:String(a.password||'').trim(), type:'o‘quvchi'});
+        }
+        return out;
+    }
+    function allCredentialOwners(excludeClass, excludeName, excludeEmployeeIndex) {
+        const out = allStudentLoginOwners(excludeClass, excludeName);
+        getEmployeesList().forEach((e,i)=>{ if(i!==excludeEmployeeIndex) out.push({login:String(e.login||'').trim(), password:String(e.password||'').trim(), type:'xodim'}); });
+        return out;
+    }
+    function suggestFreePassword(base, excludeClass, excludeName, excludeEmployeeIndex) {
+        const used = new Set(allCredentialOwners(excludeClass, excludeName, excludeEmployeeIndex).filter(x=>x.password).map(x=>x.password));
+        const clean = String(base||'parol').trim() || 'parol'; let candidate=clean, n=1;
+        while(used.has(candidate)) candidate=clean+n++;
+        return candidate;
+    }
+    function credentialConflict(login, password, excludeClass, excludeName, excludeEmployeeIndex) {
+        const l=String(login||'').trim().toLowerCase(), pw=String(password||'').trim();
+        return allCredentialOwners(excludeClass, excludeName, excludeEmployeeIndex).find(x=>(l && pw && x.login && x.password && x.login.toLowerCase()===l && x.password===pw));
+    }
+    function suggestFreeLogin(base, excludeClass, excludeName, excludeEmployeeIndex) {
+        const used = new Set(allStudentLoginOwners(excludeClass, excludeName).map(x=>x.login.toLowerCase()));
+        getEmployeesList().forEach((e,i)=>{ if(i!==excludeEmployeeIndex && e.login) used.add(String(e.login).trim().toLowerCase()); });
+        const clean = String(base||'foydalanuvchi').trim() || 'foydalanuvchi';
+        let candidate = clean, n = 1;
+        while (used.has(candidate.toLowerCase())) candidate = clean + n++;
+        return candidate;
+    }
+    function loginAlreadyUsed(login, excludeClass, excludeName, excludeEmployeeIndex) {
+        const key=String(login||'').trim().toLowerCase(); if(!key) return false;
+        if(allStudentLoginOwners(excludeClass,excludeName).some(x=>x.login.toLowerCase()===key)) return true;
+        return getEmployeesList().some((e,i)=>i!==excludeEmployeeIndex && String(e.login||'').trim().toLowerCase()===key);
+    }
     window.setStudentLogin = function(studentName, login) {
         login = login.trim();
         const cls = document.getElementById('acc-class-select').value;
-        const all = getStudentAccounts();
-        if (login) for (const c in all) for (const n in all[c]) if (all[c][n] && all[c][n].login === login && !(c === cls && n === studentName)) { alert("Bu login band!"); loadStudentAccountsList(); return; }
+        const all = getStudentAccounts(); const current=all[cls]?.[studentName] || {login:'',password:''};
+        if (credentialConflict(login, current.password, cls, studentName, -1)) { const suggestion=suggestFreeLogin(login,cls,studentName,-1); alert('Bu login va parol juftligi boshqa akkaunt bilan aynan bir xil. Tavsiya etiladigan login: ' + suggestion); loadStudentAccountsList(); return; }
         if (!all[cls]) all[cls] = {};
         if (!all[cls][studentName]) all[cls][studentName] = { login:'', password:'', subjects: [] };
         all[cls][studentName].login = login;
         saveStudentAccounts(all); loadStudentAccountsList();
     };
-    window.setStudentPassword = function(studentName, pass) {
-        pass = pass.trim();
+    window.setStudentPassword = function(studentName, pass, inputEl) {
+        pass = String(pass||'').trim();
         const cls = document.getElementById('acc-class-select').value;
-        const all = getStudentAccounts();
+        const all = getStudentAccounts(); const current=all[cls]?.[studentName] || {login:'',password:''};
+        if (credentialConflict(current.login, pass, cls, studentName, -1)) {
+            const suggestion=suggestFreePassword(pass, cls, studentName, -1);
+            alert('Bu login va parol juftligi boshqa akkaunt bilan aynan bir xil. Tavsiya etiladigan yangi parol: ' + suggestion);
+            if(inputEl) inputEl.value=suggestion;
+            if (!all[cls]) all[cls] = {};
+            if (!all[cls][studentName]) all[cls][studentName] = { login:'', password:'', subjects: [] };
+            all[cls][studentName].password=suggestion; saveStudentAccounts(all); loadStudentAccountsList(); return;
+        }
         if (!all[cls]) all[cls] = {};
         if (!all[cls][studentName]) all[cls][studentName] = { login:'', password:'', subjects: [] };
         all[cls][studentName].password = pass;
@@ -2734,9 +3093,390 @@
         saveStudentAccounts(all);
     };
 
+    function getEmployeesList() { return lsGet('employees_list', []) || []; }
+    function resolveEmployeeNumber(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return raw;
+        return raw.split(',').map(part => {
+            part = part.trim();
+            if (/^#?\d+$/.test(part)) {
+                const n = Number(part.replace('#',''));
+                const emp = getEmployeesList().find(e => Number(e.number || e.id) === n);
+                if (emp) return emp.name;
+            }
+            return part;
+        }).filter(Boolean).join(', ');
+    }
     function getAdminsList() { return lsGet('admins_list', []); }
     function saveAdminsList(arr) { lsSet('admins_list', arr); window.syncAdminsListToFirebase(arr); }
     
+    function getGradeAuditRows() {
+        const log = lsGet('grade_audit', {}) || {};
+        const currentTeacher = String(teacher || localStorage.getItem('loggedTeacher') || '').trim().toLocaleLowerCase('uz');
+        const raw = Object.entries(log).map(([auditId, item]) => item ? {...item, _auditId:auditId} : null).filter(Boolean).filter(x => {
+            if (!window.__teacherAuditOnly) return true;
+            return currentTeacher && String(x.teacher || '').trim().toLocaleLowerCase('uz') === currentTeacher;
+        });
+        // Bir o‘quvchi/bitta darsdagi baho bo‘yicha qo‘yish, tahrirlash va o‘chirish voqealarini bitta qatorda jamlaymiz.
+        const grouped = new Map();
+        raw.forEach(x => {
+            const key = [x.className,x.subject,x.group,x.student,x.quarter,x.lessonDate,x.lessonType].map(v=>String(v||'')).join('|');
+            if (!grouped.has(key)) grouped.set(key, {...x, placedTimes:[], editedTimes:[], deletedTimes:[], actions:[], teachers:[], events:[]});
+            const g = grouped.get(key);
+            const kind = gradeAuditKind(x.action);
+            const ts = Number(x.timestamp || x.placedAt || x.editedAt || x.deletedAt || 0);
+            const explicit = kind==='placed' ? (x.placedAt||ts) : kind==='edited' ? (x.editedAt||ts) : (x.deletedAt||ts);
+            const list = kind==='placed' ? g.placedTimes : kind==='edited' ? g.editedTimes : g.deletedTimes;
+            if (explicit && !list.includes(Number(explicit))) list.push(Number(explicit));
+            if (x.action && !g.actions.includes(x.action)) g.actions.push(x.action);
+            if (x.teacher && !g.teachers.includes(x.teacher)) g.teachers.push(x.teacher);
+            g.events.push({...x, timestamp:ts});
+            if (ts >= Number(g.timestamp||0)) {
+                g.timestamp=ts; g.action=x.action||g.action; g.oldValue=x.oldValue ?? g.oldValue; g.newValue=x.newValue ?? g.newValue;
+            }
+        });
+        const rows = [...grouped.values()].map(g=>{
+            ['placedTimes','editedTimes','deletedTimes'].forEach(k=>g[k].sort((a,b)=>a-b));
+            g.teacher = g.teachers.join(', ') || g.teacher || '';
+            return g;
+        });
+        const val = id => (document.getElementById(id)?.value || '').trim().toLowerCase();
+        const from = document.getElementById('audit-from')?.value || '';
+        const to = document.getElementById('audit-to')?.value || '';
+        return rows.filter(x => {
+            const allTimes=[...x.placedTimes,...x.editedTimes,...x.deletedTimes];
+            const inRange = t => { const d=new Date(Number(t)); const iso=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; return (!from||iso>=from)&&(!to||iso<=to); };
+            const actionFilter=document.getElementById('audit-action')?.value || '';
+            return (!val('audit-teacher') || x.teachers.some(t=>t.toLowerCase()===val('audit-teacher'))) &&
+                (!val('audit-class') || String(x.className||'').toLowerCase() === val('audit-class')) &&
+                (!val('audit-subject') || String(x.subject||'').toLowerCase() === val('audit-subject')) &&
+                (!val('audit-group') || String(x.group||'').toLowerCase() === val('audit-group')) &&
+                (!val('audit-student') || String(x.student||'').toLowerCase() === val('audit-student')) &&
+                (!val('audit-lesson-type') || String(x.lessonType||'').toLowerCase() === val('audit-lesson-type')) &&
+                (!actionFilter || x.actions.includes(actionFilter)) &&
+                ((!from&&!to) || allTimes.some(inRange));
+        }).sort((a,b)=>Number(b.timestamp||0)-Number(a.timestamp||0));
+    }
+    function populateGradeAuditFilters() {
+        const rows = Object.values(lsGet('grade_audit', {}) || {}).filter(Boolean);
+        const classSel = document.getElementById('audit-class');
+        const selectedClass = classSel?.value || '';
+        const classValues = [...new Set(rows.map(x=>String(x.className||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'uz'));
+        if (classSel) {
+            const previous = selectedClass;
+            classSel.innerHTML = `<option value="">Barcha sinflar</option>` + classValues.map(v=>`<option value="${hEsc(v)}">${hEsc(v)}</option>`).join('');
+            if (classValues.includes(previous)) classSel.value = previous;
+        }
+
+        // Sinf tanlansa, qolgan filtrlar faqat shu sinfga tegishli
+        // o'qituvchi, fan, guruh, o'quvchi va dars turlarini ko'rsatadi.
+        const scopedRows = selectedClass
+            ? rows.filter(x=>String(x.className||'').trim().toLowerCase()===selectedClass.trim().toLowerCase())
+            : rows;
+        const fields = [
+            ['audit-teacher','teacher','Barcha o‘qituvchilar'],
+            ['audit-subject','subject','Barcha fanlar'],
+            ['audit-group','group','Barcha guruhlar'],
+            ['audit-student','student','Barcha o‘quvchilar'],
+            ['audit-lesson-type','lessonType','Barcha dars turlari']
+        ];
+        fields.forEach(([id,key,placeholder]) => {
+            const sel = document.getElementById(id); if (!sel) return;
+            const previous = sel.value;
+            const values = [...new Set(scopedRows.flatMap(x =>
+                key === 'teacher'
+                    ? (Array.isArray(x.teachers) && x.teachers.length ? x.teachers : [x.teacher])
+                    : [x[key]]
+            ).map(v=>String(v||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'uz'));
+            sel.innerHTML = `<option value="">${placeholder}</option>` + values.map(v=>`<option value="${hEsc(v)}">${hEsc(v)}</option>`).join('');
+            if (values.includes(previous)) sel.value = previous;
+        });
+
+        // Filtr o'zgargan zahoti natijani yangilash.
+        ['audit-class','audit-teacher','audit-subject','audit-group','audit-student','audit-action','audit-lesson-type','audit-from','audit-to'].forEach(id=>{
+            const control=document.getElementById(id);
+            if(control && !control.dataset.auditBound){
+                control.dataset.auditBound='1';
+                control.addEventListener('change',()=>window.renderGradeAudit());
+            }
+        });
+        const info = document.getElementById('audit-history-info');
+        if (info) info.textContent = selectedClass
+            ? `${selectedClass} sinfi bo‘yicha filtrlar ko‘rsatilmoqda. Bazada jami ${rows.length} ta tarix yozuvi bor.`
+            : `Bazadagi jami ${rows.length} ta saqlangan tarix yozuvi. Eski Firebase audit yozuvlari ham shu ro‘yxatga qo‘shiladi.`;
+    }
+
+    function formatGradeAuditTime(value) {
+        if (!value) return '—';
+        const d = new Date(Number(value));
+        if (isNaN(d.getTime())) return '—';
+        return d.toLocaleString('uz-UZ',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+    }
+    function gradeAuditKind(action) {
+        const a=String(action||'').toLowerCase();
+        if (a.includes('o‘chir') || a.includes("o'chir")) return 'deleted';
+        if (a.includes('o‘zgart') || a.includes("o'zgart")) return 'edited';
+        return 'placed';
+    }
+    function gradeAuditActionTime(x, kind) {
+        const field = kind === 'placed' ? 'placedTimes' : kind === 'edited' ? 'editedTimes' : 'deletedTimes';
+        const values = Array.isArray(x[field]) ? x[field] : [];
+        if (values.length) return values.map(formatGradeAuditTime).join('\n');
+        // Old audit records only had `timestamp`; use it for the matching action.
+        const legacy = kind === 'placed' ? x.placedAt : kind === 'edited' ? x.editedAt : x.deletedAt;
+        const value = legacy || (gradeAuditKind(x.action) === kind ? x.timestamp : null);
+        return formatGradeAuditTime(value);
+    }
+
+    window.openTeacherGradeAudit = function() {
+        if (!teacher && !localStorage.getItem('loggedTeacher')) return alert('Avval o‘qituvchi sifatida kiring.');
+        teacher = teacher || localStorage.getItem('loggedTeacher') || '';
+        const modal = document.getElementById('teacher-grade-audit-modal');
+        const owner = document.getElementById('teacher-audit-owner');
+        if (owner) owner.textContent = '👨‍🏫 O‘qituvchi: ' + teacher + ' · Faqat sizga tegishli yozuvlar';
+        if (modal) modal.style.display = 'block';
+        renderTeacherGradeAudit();
+    };
+    window.closeTeacherGradeAudit = function() {
+        const modal = document.getElementById('teacher-grade-audit-modal');
+        if (modal) modal.style.display = 'none';
+    };
+    window.resetTeacherGradeAuditFilters = function() {
+        ['teacher-audit-class','teacher-audit-subject','teacher-audit-group','teacher-audit-student','teacher-audit-action','teacher-audit-lesson-type','teacher-audit-from','teacher-audit-to'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+        renderTeacherGradeAudit();
+    };
+    window.renderTeacherGradeAudit = function() {
+        const el = document.getElementById('teacher-grade-audit-results');
+        const info = document.getElementById('teacher-grade-audit-info');
+        if (!el) return;
+        const previous = window.__teacherAuditOnly;
+        window.__teacherAuditOnly = true;
+        let rows = getGradeAuditRows();
+        window.__teacherAuditOnly = previous;
+        const ownTeacher = String(teacher || localStorage.getItem('loggedTeacher') || '').trim().toLocaleLowerCase('uz');
+        // Filtr variantlari faqat tizimga kirgan o‘qituvchining yozuvlaridan olinadi.
+        const classSel=document.getElementById('teacher-audit-class');
+        const selectedClass=classSel?.value||'';
+        const scoped=selectedClass?rows.filter(x=>String(x.className||'').toLowerCase()===selectedClass.toLowerCase()):rows;
+        const fill=(id,values,placeholder)=>{
+            const sel=document.getElementById(id); if(!sel)return;
+            const old=sel.value;
+            const vals=[...new Set(values.map(v=>String(v||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'uz'));
+            sel.innerHTML=`<option value="">${placeholder}</option>`+vals.map(v=>`<option value="${hEsc(v)}">${hEsc(v)}</option>`).join('');
+            if(vals.includes(old))sel.value=old;
+        };
+        fill('teacher-audit-class',rows.map(x=>x.className),'Barcha sinflar');
+        fill('teacher-audit-subject',scoped.map(x=>x.subject),'Barcha fanlar');
+        fill('teacher-audit-group',scoped.map(x=>x.group),'Barcha guruhlar');
+        fill('teacher-audit-student',scoped.map(x=>x.student),'Barcha o‘quvchilar');
+        fill('teacher-audit-lesson-type',scoped.map(x=>x.lessonType),'Barcha dars turlari');
+        ['teacher-audit-class','teacher-audit-subject','teacher-audit-group','teacher-audit-student','teacher-audit-action','teacher-audit-lesson-type','teacher-audit-from','teacher-audit-to'].forEach(id=>{
+            const c=document.getElementById(id);if(c&&!c.dataset.teacherAuditBound){c.dataset.teacherAuditBound='1';c.addEventListener('change',()=>renderTeacherGradeAudit());}
+        });
+        const val=id=>(document.getElementById(id)?.value||'').trim().toLocaleLowerCase('uz');
+        const from=document.getElementById('teacher-audit-from')?.value||'';
+        const to=document.getElementById('teacher-audit-to')?.value||'';
+        rows=rows.filter(x=>{
+            const times=[...(x.placedTimes||[]),...(x.editedTimes||[]),...(x.deletedTimes||[])];
+            const inRange=t=>{const d=new Date(Number(t));if(isNaN(d.getTime()))return false;const iso=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;return (!from||iso>=from)&&(!to||iso<=to);};
+            const action=val('teacher-audit-action');
+            const actionMatch=!action||(x.actions||[]).some(a=>{const k=gradeAuditKind(a);return (action==='qo‘yildi'&&k==='placed')||(action==='o‘zgartirildi'&&k==='edited')||(action==='o‘chirildi'&&k==='deleted');});
+            return (!val('teacher-audit-class')||String(x.className||'').toLocaleLowerCase('uz')===val('teacher-audit-class'))&&
+                (!val('teacher-audit-subject')||String(x.subject||'').toLocaleLowerCase('uz')===val('teacher-audit-subject'))&&
+                (!val('teacher-audit-group')||String(x.group||'').toLocaleLowerCase('uz')===val('teacher-audit-group'))&&
+                (!val('teacher-audit-student')||String(x.student||'').toLocaleLowerCase('uz')===val('teacher-audit-student'))&&
+                (!val('teacher-audit-lesson-type')||String(x.lessonType||'').toLocaleLowerCase('uz')===val('teacher-audit-lesson-type'))&&actionMatch&&
+                ((!from&&!to)||times.some(inRange));
+        });
+        if (info) info.textContent = 'Sizga tegishli jami ' + rows.length + ' ta amal. Filtrlar faqat ' + (teacher||localStorage.getItem('loggedTeacher')||'kirgan o‘qituvchi') + ' yozuvlariga qo‘llanadi; boshqa o‘qituvchilar ma’lumotlari ko‘rsatilmaydi.';
+        if (!rows.length) {
+            el.innerHTML = '<div style="padding:22px;text-align:center;color:#64748b;">Tanlangan filtrlar bo‘yicha sizga tegishli baholar tarixi topilmadi. Filtrlarni tozalab qayta qidiring.</div>';
+            return;
+        }
+        const headers = ['🟢 QO‘YILGAN VAQT','🔵 TAHRIRLANGAN VAQT','🔴 O‘CHIRILGAN VAQT','AMAL TURI','SINF','FAN','GURUH','O‘QUVCHI','DARS SANASI','DARS TURI','ESKI BAHO','YANGI BAHO'];
+        el.innerHTML = `<div style="padding:8px 10px;background:#eef2ff;color:#3730a3;font-weight:800;border-radius:7px;margin-bottom:8px;">Jami: ${rows.length} ta amal</div><div style="display:flex;gap:12px;flex-wrap:wrap;margin:0 0 9px;font-size:12px;font-weight:700;"><span style="color:#166534;background:#dcfce7;padding:5px 9px;border-radius:8px;">🟢 Qo‘yilgan</span><span style="color:#1d4ed8;background:#dbeafe;padding:5px 9px;border-radius:8px;">🔵 O‘zgartirilgan</span><span style="color:#b91c1c;background:#fee2e2;padding:5px 9px;border-radius:8px;">🔴 O‘chirilgan</span></div><table style="min-width:1250px;width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>${headers.map(h=>`<th style="position:sticky;top:0;background:#4338ca;color:white;padding:10px;white-space:nowrap;z-index:2;">${h}</th>`).join('')}</tr></thead><tbody>${rows.map((x,i)=>{const actions=x.actions||[x.action||''];const chips=actions.map(action=>{const k=gradeAuditKind(action);const cfg=k==='deleted'?['#fee2e2','#b91c1c','🔴']:k==='edited'?['#dbeafe','#1d4ed8','🔵']:['#dcfce7','#166534','🟢'];return `<span style="display:inline-block;background:${cfg[0]};color:${cfg[1]};padding:4px 8px;border-radius:12px;font-weight:800;white-space:nowrap;margin:2px;">${cfg[2]} ${hEsc(action)}</span>`}).join('');return `<tr style="background:${i%2?'#f8fafc':'#fff'}"><td style="padding:8px;white-space:pre-line;color:#166534;background:#f0fdf4;font-weight:800;">${hEsc(gradeAuditActionTime(x,'placed'))}</td><td style="padding:8px;white-space:pre-line;color:#1d4ed8;background:#eff6ff;font-weight:800;">${hEsc(gradeAuditActionTime(x,'edited'))}</td><td style="padding:8px;white-space:pre-line;color:#b91c1c;background:#fef2f2;font-weight:800;">${hEsc(gradeAuditActionTime(x,'deleted'))}</td><td style="padding:8px;min-width:145px;">${chips||'—'}</td><td style="padding:8px;">${hEsc(x.className||'—')}</td><td style="padding:8px;">${hEsc(x.subject||'—')}</td><td style="padding:8px;">${hEsc(x.group||'—')}</td><td style="padding:8px;font-weight:700;">${hEsc(x.student||'—')}</td><td style="padding:8px;white-space:nowrap;">${hEsc(x.lessonDate||'—')}</td><td style="padding:8px;">${hEsc(x.lessonType||'—')}</td><td style="padding:8px;text-align:center;">${hEsc(x.oldValue||'—')}</td><td style="padding:8px;text-align:center;font-weight:800;">${hEsc(x.newValue||'—')}</td></tr>`}).join('')}</tbody></table>`;
+    };
+    window.teacherAuditExport = function(fnName) {
+        const fn = window[fnName];
+        if (typeof fn !== 'function') return alert('Saqlash funksiyasi topilmadi.');
+        window.__teacherAuditOnly = true;
+        try {
+            const result = fn();
+            if (result && typeof result.finally === 'function') result.finally(() => { window.__teacherAuditOnly = false; });
+            else window.__teacherAuditOnly = false;
+        } catch (e) {
+            window.__teacherAuditOnly = false;
+            console.error(e);
+            alert('Faylni saqlashda xatolik yuz berdi.');
+        }
+    };
+
+    window.resetGradeAuditFilters = function() {
+        ['audit-teacher','audit-class','audit-subject','audit-group','audit-student','audit-action','audit-lesson-type','audit-from','audit-to'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+        renderGradeAudit();
+    };
+    window.renderGradeAudit = function() {
+        const el = document.getElementById('grade-audit-results'); if (!el) return;
+        populateGradeAuditFilters();
+        const rows = getGradeAuditRows();
+        if (!rows.length) { el.innerHTML = '<div style="padding:18px;text-align:center;color:#64748b;">Tanlangan shartlar bo‘yicha tarix topilmadi. Filtrlarni tozalab qayta qidiring.</div>'; return; }
+        el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;font-weight:700;margin:4px 0 10px;align-items:center;"><span>Jami: ${rows.length} ta amal</span><span style="background:#dcfce7;color:#166534;padding:4px 9px;border-radius:14px;font-size:12px;">🟢 Qo‘yildi</span><span style="background:#dbeafe;color:#1d4ed8;padding:4px 9px;border-radius:14px;font-size:12px;">🔵 O‘zgartirildi</span><span style="background:#fee2e2;color:#b91c1c;padding:4px 9px;border-radius:14px;font-size:12px;">🔴 O‘chirildi</span></div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;margin-bottom:9px;"><label style="font-weight:800;font-size:12px;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="audit-select-all" onchange="toggleAllGradeAuditSelection(this.checked)"> Barchasini tanlash</label><button type="button" onclick="deleteSelectedGradeAuditEvents()" style="background:#dc2626;color:white;border:0;border-radius:8px;padding:8px 12px;font-weight:800;cursor:pointer;">🗑 Tanlanganlarni o‘chirish</button><span id="audit-selected-count" style="font-size:12px;color:#475569;font-weight:700;">0 ta tanlangan</span></div><table id="grade-audit-table" style="min-width:1500px;width:100%;border-collapse:separate;border-spacing:0;font-size:12px;"><thead><tr style="background:#1e3a8a;color:white;">${['TANLASH','🟢 QO‘YILGAN VAQT','🔵 TAHRIRLANGAN VAQT','🔴 O‘CHIRILGAN VAQT','AMAL TURI','O‘QITUVCHI','SINF','FAN','GURUH','O‘QUVCHI','DARS SANASI','DARS TURI','ESKI BAHO','YANGI BAHO'].map(h=>`<th scope="col" style="padding:12px 10px;position:sticky;top:0;z-index:20;white-space:nowrap;background:#1e3a8a!important;color:#fff!important;font-size:12px;font-weight:900;text-align:center;border-bottom:3px solid #93c5fd;box-shadow:0 2px 4px rgba(15,23,42,.18);">${h}</th>`).join('')}</tr></thead><tbody>${rows.map((x,i)=>{return `<tr style="background:${i%2?'#f8fafc':'#ffffff'};border-bottom:1px solid #e2e8f0;"><td style="padding:8px;text-align:center;"><div style="display:flex;flex-direction:column;gap:7px;align-items:center;">${(x.events||[]).map(ev=>`<input class="grade-audit-select" type="checkbox" value="${hEsc(String(ev._auditId||''))}" onchange="updateGradeAuditSelectedCount()" aria-label="Ushbu amalni tanlash">`).join('')}</div></td><td style="padding:9px;white-space:pre-line;min-width:145px;line-height:1.55;color:#166534;font-weight:700;">${hEsc(gradeAuditActionTime(x,'placed'))}</td><td style="padding:9px;white-space:pre-line;min-width:145px;line-height:1.55;color:#1d4ed8;font-weight:700;">${hEsc(gradeAuditActionTime(x,'edited'))}</td><td style="padding:9px;white-space:pre-line;min-width:145px;line-height:1.55;color:#b91c1c;font-weight:700;">${hEsc(gradeAuditActionTime(x,'deleted'))}</td><td style="padding:9px;min-width:210px;"><div style="display:flex;flex-direction:column;align-items:flex-start;gap:7px;">${(x.events||[]).map(ev=>{const ek=gradeAuditKind(ev.action);const ec=ek==='deleted'?['#fee2e2','#b91c1c','🔴']:ek==='edited'?['#dbeafe','#1d4ed8','🔵']:['#dcfce7','#166534','🟢'];const aid=String(ev._auditId||'');return `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;border:1px solid ${ec[0]};padding:5px;border-radius:8px;background:#fff;"><span style="display:inline-block;padding:5px 9px;border-radius:15px;background:${ec[0]};color:${ec[1]};font-weight:800;white-space:nowrap;">${ec[2]} ${hEsc(ev.action||'Amal')}</span></div>`;}).join('')}</div></td><td style="padding:9px;">${hEsc(x.teacher||'—')}</td><td style="padding:9px;">${hEsc(x.className||'—')}</td><td style="padding:9px;">${hEsc(x.subject||'—')}</td><td style="padding:9px;">${hEsc(x.group||'—')}</td><td style="padding:9px;font-weight:700;">${hEsc(x.student||'—')}</td><td style="padding:9px;white-space:nowrap;">${hEsc(x.lessonDate||'—')}</td><td style="padding:9px;">${hEsc(x.lessonType||'—')}</td><td style="padding:9px;text-align:center;">${hEsc(x.oldValue||'—')}</td><td style="padding:9px;text-align:center;font-weight:800;">${hEsc(x.newValue||'—')}</td></tr>`}).join('')}</tbody></table>`;
+        updateGradeAuditSelectedCount();
+    };
+    window.toggleAllGradeAuditSelection = function(checked) {
+        document.querySelectorAll('#grade-audit-results .grade-audit-select').forEach(cb=>{cb.checked=!!checked;});
+        updateGradeAuditSelectedCount();
+    };
+    window.updateGradeAuditSelectedCount = function() {
+        const boxes=[...document.querySelectorAll('#grade-audit-results .grade-audit-select')];
+        const count=boxes.filter(cb=>cb.checked).length;
+        const label=document.getElementById('audit-selected-count'); if(label) label.textContent=count+' ta amal tanlangan';
+        const all=document.getElementById('audit-select-all'); if(all){all.checked=boxes.length>0&&count===boxes.length;all.indeterminate=count>0&&count<boxes.length;}
+    };
+    function removeGradeAuditActualValue(ev, choice) {
+        const kind=gradeAuditKind(ev.action);
+        if (kind==='deleted') return {removed:false,reason:'Bu amal paytida baho avval o‘chirilgan edi'};
+        const target=choice==='old' ? gradeAuditValue(ev.oldValue) : gradeAuditValue(ev.newValue);
+        if (!target) return {removed:false,reason:'Tanlangan amal uchun o‘chiriladigan baho qiymati yo‘q'};
+        const q=String(ev.quarter||''); const cls=String(ev.className||''); const sub=String(ev.subject||'');
+        const key=markKey(q,cls,sub); const marks=JSON.parse(JSON.stringify(getMarksByKey(key)||{}));
+        const studentKey=getStudentKeyByName(cls,ev.student||'');
+        const dateKey=String(ev.lessonDate||'')+(ev.lessonType&&ev.lessonType!=='Asosiy baho'?'__lt_'+ev.lessonType:'');
+        const current=marks[studentKey] && marks[studentKey][dateKey];
+        if (gradeAuditValue(current)!==target) return {removed:false,reason:`${ev.student||'O‘quvchi'}: jadvalda hozirgi baho ${current==null?'yo‘q':current}, tanlangan qiymat ${target}. Jadval o‘zgartirilmadi`};
+        delete marks[studentKey][dateKey];
+        if (marks[studentKey] && !Object.keys(marks[studentKey]).some(k=>!k.startsWith('__'))) delete marks[studentKey];
+        marks.__ts=Date.now();
+        window.__marksCache=window.__marksCache||{}; window.__marksCache[key]=marks;
+        lsSet(key,marks); if(window.syncToFirebase) window.syncToFirebase(key,marks);
+        return {removed:true,reason:`${ev.student||'O‘quvchi'}: ${target} bahosi jadvaldan o‘chirildi`};
+    }
+    window.deleteSelectedGradeAuditEvents = function(singleId) {
+        const ids=singleId?[String(singleId)]:[...document.querySelectorAll('#grade-audit-results .grade-audit-select:checked')].map(cb=>cb.value).filter(Boolean);
+        if(!ids.length) return alert('Avval o‘chiriladigan amallarni belgilang.');
+        const log=lsGet('grade_audit',{})||{}; const events=ids.map(id=>log[id]).filter(Boolean);
+        if(!events.length) return alert('Tanlangan amallar topilmadi yoki avval o‘chirilgan.');
+        const pass=window.prompt('Tanlangan amal(lar)ni o‘chirish uchun Sozlamalar parolini kiriting:');
+        if(pass===null) return;
+        if(pass!=='0000') return alert('Sozlamalar paroli xato! Hech narsa o‘chirilmadi.');
+        const canRemoveGrade=events.some(ev=>gradeAuditKind(ev.action)!=='deleted' && (ev.newValue||ev.oldValue));
+        let choice='history';
+        if(canRemoveGrade){
+            const answer=window.prompt(`O‘chirish turini tanlang:\n1 — Faqat baholar tarixidan o‘chirish\n2 — Tarixdan va jadvaldagi YANGI/joriy bahodan o‘chirish\n3 — Tarixdan va jadvalda aynan OLD baho turgan bo‘lsa, o‘shani o‘chirish\n\nRaqamini kiriting (1, 2 yoki 3):`,'1');
+            if(answer===null) return;
+            if(!['1','2','3'].includes(answer.trim())) return alert('Tanlov noto‘g‘ri. Hech narsa o‘chirilmadi.');
+            choice=answer.trim()==='1'?'history':answer.trim()==='2'?'new':'old';
+        }
+        const detail=choice==='history'?'Faqat tarix yozuvlari o‘chadi. Jadvaldagi baholar saqlanadi.':choice==='new'?'Tarix yozuvlari va jadvalda aynan shu amalning yangi/joriy bahosi turgan kataklar o‘chiriladi.':'Tarix yozuvlari va jadvalda aynan shu amalning eski bahosi turgan kataklar o‘chiriladi.';
+        if(!confirm(`${events.length} ta amal tanlandi.
+${detail}
+
+Davom etasizmi? Bu amalni ortga qaytarib bo‘lmaydi.`)) return;
+        const results=[];
+        events.forEach(ev=>{
+            if(choice!=='history') results.push(removeGradeAuditActualValue(ev,choice));
+            delete log[ids.find(id=>log[id]===ev)];
+        });
+        lsSet('grade_audit',log); if(window.syncGradeAuditToFirebase) window.syncGradeAuditToFirebase(log);
+        window.renderGradeAudit();
+        const removed=results.filter(x=>x.removed).length;
+        const skipped=results.filter(x=>!x.removed).length;
+        alert(choice==='history'?`${events.length} ta amal faqat tarixdan o‘chirildi.`:`${events.length} ta tarix yozuvi o‘chirildi. Jadvaldan bahosi o‘chirilgan: ${removed} ta. Jadvalga tegilmagan: ${skipped} ta.`+(skipped?'\n'+results.filter(x=>!x.removed).map(x=>x.reason).join('\n'):''));
+    };
+    window.deleteGradeAuditEvent = function(auditId) { window.deleteSelectedGradeAuditEvents(auditId); };
+
+    window.exportGradeAuditCSV = function() {
+        const rows = getGradeAuditRows();
+        const cols = ['Qo‘yilgan vaqt','Tahrirlangan vaqt','O‘chirilgan vaqt','Amal','O‘qituvchi','Sinf','Fan','Guruh','O‘quvchi','Qaysi kun uchun','Dars turi','Eski baho','Yangi baho'];
+        const data = rows.map(x=>[gradeAuditActionTime(x,'placed'),gradeAuditActionTime(x,'edited'),gradeAuditActionTime(x,'deleted'),x.action,x.teacher,x.className,x.subject,x.group,x.student,x.lessonDate,x.lessonType,x.oldValue,x.newValue]);
+        const csv = '\\uFEFF' + [cols,...data].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';')).join('\\r\\n');
+        const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='baholar_tarixi.csv'; a.click(); URL.revokeObjectURL(url);
+    };
+
+    function gradeAuditExportData() {
+        const rows=getGradeAuditRows();
+        const headers=['Qo‘yilgan vaqt','Tahrirlangan vaqt','O‘chirilgan vaqt','Amal','O‘qituvchi','Sinf','Fan','Guruh','O‘quvchi','Qaysi kun uchun','Dars turi','Eski baho','Yangi baho'];
+        const data=rows.map(x=>[gradeAuditActionTime(x,'placed'),gradeAuditActionTime(x,'edited'),gradeAuditActionTime(x,'deleted'),x.action||'',x.teacher||'',x.className||'',x.subject||'',x.group||'',x.student||'',x.lessonDate||'',x.lessonType||'',x.oldValue||'',x.newValue||'']);
+        return {rows,headers,data};
+    }
+    function downloadAuditBlob(content,type,name){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);}
+    function auditActionColor(action){const a=String(action||'').toLowerCase();return a.includes('o‘chir')||a.includes("o'chir")?'#FEE2E2':a.includes('o‘zgart')||a.includes("o'zgart")?'#DBEAFE':'#DCFCE7';}
+    window.exportGradeAuditExcel=function(){
+        const {headers,data}=gradeAuditExportData();const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        const html=`<html><head><meta charset="utf-8"></head><body><h2>Baholar tarixi va audit hisoboti</h2><table border="1"><thead><tr>${headers.map(h=>`<th style="background:#1e3a8a;color:white">${esc(h)}</th>`).join('')}</tr></thead><tbody>${data.map(r=>`<tr>${r.map((v,i)=>`<td style="${i===1?`background:${auditActionColor(v)};font-weight:bold`:''}">${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></body></html>`;
+        downloadAuditBlob('\uFEFF'+html,'application/vnd.ms-excel;charset=utf-8;','baholar_tarixi.xls');
+    };
+    window.exportGradeAuditWord=function(){
+        const {headers,data}=gradeAuditExportData();const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        const html=`<html><head><meta charset="utf-8"><style>body{font-family:Arial}h2{color:#1e3a8a}table{border-collapse:collapse;width:100%;font-size:9pt}th{background:#1e3a8a;color:white}td,th{border:1px solid #9ca3af;padding:5px}tr:nth-child(even){background:#f8fafc}</style></head><body><h2>Baholar tarixi va audit hisoboti</h2><p>Jami: ${data.length} ta amal</p><table><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr>${data.map(r=>`<tr>${r.map((v,i)=>`<td style="${i===1?`background:${auditActionColor(v)};font-weight:bold`:''}">${esc(v)}</td>`).join('')}</tr>`).join('')}</table></body></html>`;
+        downloadAuditBlob('\uFEFF'+html,'application/msword;charset=utf-8;','baholar_tarixi.doc');
+    };
+    window.exportGradeAuditPDF=function(){
+        const {headers,data}=gradeAuditExportData();const w=window.open('','_blank');if(!w){alert('PDF uchun yangi oyna ochilmadi. Brauzerda pop-up oynalarga ruxsat bering.');return;}
+        const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        w.document.write(`<html><head><meta charset="utf-8"><title>Baholar tarixi</title><style>@page{size:A4 landscape;margin:10mm}body{font:10px Arial;color:#172554}h2{font-size:18px}table{border-collapse:collapse;width:100%;font-size:8px}th{background:#1e3a8a;color:white}td,th{border:1px solid #94a3b8;padding:4px}tr:nth-child(even){background:#f8fafc}</style></head><body><h2>Baholar tarixi va audit hisoboti</h2><p>Jami: ${data.length} ta amal</p><table><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr>${data.map(r=>`<tr>${r.map((v,i)=>`<td style="${i===1?`background:${auditActionColor(v)}`:''}">${esc(v)}</td>`).join('')}</tr>`).join('')}</table><script>window.onload=()=>window.print()<\/script></body></html>`);w.document.close();
+    };
+    window.exportGradeAuditPPTX=async function(){
+        const {headers,data}=gradeAuditExportData();if(!data.length){alert('Yuklab olish uchun tarix topilmadi.');return;}
+        if(!window.PptxGenJS){const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';document.head.appendChild(sc);try{await new Promise((res,rej)=>{sc.onload=res;sc.onerror=rej;});}catch(e){alert('PowerPoint eksporti uchun internet kerak.');return;}}
+        try{const pptx=new window.PptxGenJS();pptx.layout='LAYOUT_WIDE';pptx.author='Baholar tarixi';pptx.subject='Audit hisoboti';pptx.title='Baholar tarixi';const per=12,total=Math.ceil(data.length/per);for(let p=0;p<total;p++){const slide=pptx.addSlide();slide.background={color:'F8FAFC'};slide.addText('BAHOLAR TARIXI VA AUDIT HISOBOTI',{x:.3,y:.15,w:12.7,h:.35,fontSize:18,bold:true,color:'1E3A8A'});slide.addText(`Jami ${data.length} ta amal | ${p+1}/${total}-slayd`,{x:.3,y:.52,w:12.7,h:.22,fontSize:9,color:'475569'});const chunk=data.slice(p*per,(p+1)*per);const tableRows=[headers.map(h=>({text:h,options:{bold:true,color:'FFFFFF',fill:'1E3A8A',fontSize:7}})),...chunk.map((r,ri)=>r.map((v,i)=>({text:String(v??''),options:{fontSize:6,fill:i===1?auditActionColor(v).replace('#',''):(ri%2?'F1F5F9':'FFFFFF'),color:'1E293B'}})))];slide.addTable(tableRows,{x:.25,y:.85,w:12.85,h:6.25,border:{type:'solid',color:'CBD5E1',pt:.5},colW:[1.15,1.15,1.15,.8,.85,.45,.7,.65,1.05,.8,.7,.4,.4],rowH:.45,margin:.04,autoFit:false});}await pptx.writeFile({fileName:'baholar_tarixi.pptx'});}catch(e){console.error(e);alert('PowerPoint faylini yaratishda xatolik yuz berdi.');}
+    };
+
+    window.renderAdminScopeOptions = function() {
+        // Sinf tanlovi o'zgarsa, fan va guruh ro'yxatini shu sinf(lar)ga mos yangilaydi.
+        const classSel = document.getElementById('new-admin-classes');
+        const subSel = document.getElementById('new-admin-subjects');
+        const grpSel = document.getElementById('new-admin-groups');
+        if (!classSel || !subSel || !grpSel) return;
+        const selectedClasses = Array.from(classSel.selectedOptions).map(o => o.value);
+        const oldSubs = new Set(Array.from(subSel.selectedOptions).map(o => o.value));
+        const oldGroups = new Set(Array.from(grpSel.selectedOptions).map(o => o.value));
+        const subjects = new Set(), groups = new Set();
+        selectedClasses.forEach(c => getClassSubjectsRaw(c).forEach(subject => {
+            if (!subject || !subject.name) return;
+            subjects.add(subject.name);
+            (lsGet(`groups_${c}_${subject.name}`, []) || []).forEach(g => { if (g && g.name) groups.add(g.name); });
+        }));
+        subSel.innerHTML = '';
+        if (!selectedClasses.length) subSel.add(new Option('Avval sinfni tanlang', ''));
+        Array.from(subjects).sort().forEach(v => { const o=new Option(v,v); o.selected=oldSubs.has(v); subSel.add(o); });
+        grpSel.innerHTML = '';
+        if (!selectedClasses.length) grpSel.add(new Option('Avval sinfni tanlang', ''));
+        Array.from(groups).sort().forEach(v => { const o=new Option(v,v); o.selected=oldGroups.has(v); grpSel.add(o); });
+    };
+
+    window.selectAllAdminPermissions = function() {
+        // Barcha sinflarni belgilash va shu sinflarga tegishli fan/guruhlarni qayta yuklash.
+        const classSel = document.getElementById('new-admin-classes');
+        if (!classSel) return;
+        if (classSel.options.length === 0) getClassesList().forEach(c => classSel.add(new Option(c, c)));
+        Array.from(classSel.options).forEach(o => { o.selected = true; });
+        window.renderAdminScopeOptions();
+
+        // Sana va dars turlari ro'yxatini to'liq shakllantirish.
+        const dateSel = document.getElementById('new-admin-dates');
+        if (dateSel && dateSel.options.length === 0) {
+            getQuarters().forEach(q => {
+                if (!q.start || !q.end) return;
+                let cur = new Date(q.start + 'T00:00:00');
+                const end = new Date(q.end + 'T00:00:00');
+                while (cur <= end) {
+                    const iso = isoOfDate(cur);
+                    dateSel.add(new Option(`${cur.getDate()}-${mon[cur.getMonth()]}`, iso));
+                    cur.setDate(cur.getDate() + 1);
+                }
+            });
+        }
+        const ltSel = document.getElementById('new-admin-lessontypes');
+        if (ltSel && ltSel.options.length === 0) getLessonTypes().forEach(t => ltSel.add(new Option(t.short + ' - ' + t.full, t.short)));
+
+        ['new-admin-subjects','new-admin-groups','new-admin-dates','new-admin-lessontypes'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) Array.from(el.options).forEach(o => { o.selected = true; });
+        });
+        alert('Barcha sinflar, ularga tegishli fanlar, guruhlar, mavjud sanalar va dars turlari belgilandi. Endi “Qo‘shish” tugmasini bosing.');
+    };
+
     function renderAdminsList() {
         const cont = document.getElementById('admins-list-container');
         if (!cont) return;
@@ -2749,23 +3489,29 @@
         if (classSel && classSel.options.length === 0) {
             getClassesList().forEach(c => classSel.add(new Option(c, c)));
         }
-        if (subSel && subSel.options.length === 0) {
-            const allSubs = new Set();
-            getClassesList().forEach(c => getClassSubjectsRaw(c).forEach(s => allSubs.add(s.name)));
-            Array.from(allSubs).sort().forEach(s => subSel.add(new Option(s, s)));
-        }
-        if (grpSel && grpSel.options.length === 0) {
-            const allGrps = new Set();
-            getClassesList().forEach(c => {
-                getClassSubjectsRaw(c).forEach(s => {
-                    lsGet(`groups_${c}_${s.name}`, []).forEach(g => { if(g.name) allGrps.add(g.name); });
+        // Fan va guruhlar faqat tanlangan sinf(lar)dan olinadi.
+        if (subSel && grpSel) {
+            const selectedClasses = classSel ? Array.from(classSel.selectedOptions).map(o => o.value) : [];
+            const oldSubs = new Set(Array.from(subSel.selectedOptions).map(o => o.value));
+            const oldGroups = new Set(Array.from(grpSel.selectedOptions).map(o => o.value));
+            const subjects = new Set();
+            const groups = new Set();
+            selectedClasses.forEach(c => {
+                getClassSubjectsRaw(c).forEach(subject => {
+                    if (!subject || !subject.name) return;
+                    subjects.add(subject.name);
+                    (lsGet(`groups_${c}_${subject.name}`, []) || []).forEach(g => { if (g && g.name) groups.add(g.name); });
                 });
             });
-            Array.from(allGrps).sort().forEach(g => grpSel.add(new Option(g, g)));
+            subSel.innerHTML = '';
+            if (!selectedClasses.length) subSel.add(new Option('Avval sinfni tanlang', ''));
+            Array.from(subjects).sort().forEach(v => { const o=new Option(v,v); o.selected=oldSubs.has(v); subSel.add(o); });
+            grpSel.innerHTML = '';
+            if (!selectedClasses.length) grpSel.add(new Option('Avval sinfni tanlang', ''));
+            Array.from(groups).sort().forEach(v => { const o=new Option(v,v); o.selected=oldGroups.has(v); grpSel.add(o); });
         }
         if (dateSel && dateSel.options.length === 0) {
-            const quarters = getQuarters();
-            quarters.forEach(q => {
+            getQuarters().forEach(q => {
                 if (q.start && q.end) {
                     let cur = new Date(q.start + 'T00:00:00');
                     const end = new Date(q.end + 'T00:00:00');
@@ -2791,8 +3537,10 @@
             const datesStr = a.dates || '';
             const groupsStr = a.groups || '';
             const ltsStr = a.lessontypes || '';
+            const empNo = a.employeeNumber || '';
             html += `<div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; border-bottom:1px solid #f1f5f9; padding-bottom:8px; flex-wrap:wrap;">
                 <span style="font-weight:bold; width:20px; font-size:12px;">${i+1}.</span>
+                <input type="text" class="gi" style="width:62px;height:32px;font-weight:normal;text-align:left;" value="${hEsc(empNo)}" onchange="updateAdmin(${i}, 'employeeNumber', this.value)" placeholder="№">
                 <input type="text" class="gi" style="width:120px; height:32px; font-weight:normal; text-align:left;" value="${hEsc(a.name||'')}" onchange="updateAdmin(${i}, 'name', this.value)" placeholder="Ism">
                 <input type="text" class="gi" style="width:100px; height:32px; font-weight:normal; text-align:left;" value="${hEsc(classesStr)}" onchange="updateAdmin(${i}, 'classes', this.value)" placeholder="Sinflar">
                 <input type="text" class="gi" style="width:100px; height:32px; font-weight:normal; text-align:left;" value="${hEsc(subjectsStr)}" onchange="updateAdmin(${i}, 'subjects', this.value)" placeholder="Fanlar">
@@ -2805,27 +3553,39 @@
         cont.innerHTML = html;
     }
     window.addAdmin = function() {
-        const name = document.getElementById('new-admin-name').value.trim();
-        if (!name) return alert("Admin ismini kiriting!");
-        
+        const numberRaw = document.getElementById('new-admin-employee-number').value.trim().replace(/^#/, '');
+        const employee = numberRaw ? getEmployeesList().find(e => Number(e.number || e.id) === Number(numberRaw)) : null;
+        if (numberRaw && !employee) return alert('Bunday tartib raqamli xodim topilmadi. Xodim № ni tekshiring.');
+        const name = (employee ? employee.name : document.getElementById('new-admin-name').value).trim();
+        if (!name) return alert('Xodim tartib raqamini yoki admin ism-familiyasini kiriting!');
         const classes = Array.from(document.getElementById('new-admin-classes').selectedOptions).map(o => o.value).join(',');
         const subjects = Array.from(document.getElementById('new-admin-subjects').selectedOptions).map(o => o.value).join(',');
         const groups = Array.from(document.getElementById('new-admin-groups').selectedOptions).map(o => o.value).join(',');
         const dates = Array.from(document.getElementById('new-admin-dates').selectedOptions).map(o => o.value).join(',');
         const lessontypes = Array.from(document.getElementById('new-admin-lessontypes').selectedOptions).map(o => o.value).join(',');
-
         const admins = getAdminsList();
-        admins.push({ name, classes, subjects, groups, dates, lessontypes });
+        const empNo = employee ? Number(employee.number || employee.id) : '';
+        const existing = admins.findIndex(a => (empNo && Number(a.employeeNumber) === empNo) || String(a.name||'').trim().toLocaleLowerCase('uz') === name.toLocaleLowerCase('uz'));
+        const record = { name, employeeNumber:empNo, classes, subjects, groups, dates, lessontypes };
+        if (existing >= 0) admins[existing] = {...admins[existing], ...record}; else admins.push(record);
         saveAdminsList(admins);
         document.getElementById('new-admin-name').value = '';
+        document.getElementById('new-admin-employee-number').value = '';
+        ['new-admin-classes','new-admin-subjects','new-admin-groups','new-admin-dates','new-admin-lessontypes'].forEach(id=>{const el=document.getElementById(id); if(el) Array.from(el.options).forEach(o=>o.selected=false);});
         renderAdminsList();
-        alert("✅ Admin qo'shildi!");
+        alert('✅ Xodimga admin ruxsatlari saqlandi!');
     };
     window.updateAdmin = function(idx, key, val) {
         const admins = getAdminsList();
         if (admins[idx]) {
-            admins[idx][key] = val;
-            saveAdminsList(admins);
+            if (key === 'employeeNumber') {
+                const raw=String(val||'').trim().replace(/^#/,'');
+                const emp=raw ? getEmployeesList().find(e=>Number(e.number||e.id)===Number(raw)) : null;
+                if(raw && !emp){alert('Bunday xodim tartib raqami topilmadi.');renderAdminsList();return;}
+                admins[idx].employeeNumber=raw ? Number(emp.number||emp.id) : '';
+                if(emp) admins[idx].name=emp.name;
+            } else admins[idx][key] = val;
+            saveAdminsList(admins); renderAdminsList();
         }
     };
     window.deleteAdmin = function(idx) {
@@ -2834,6 +3594,90 @@
         admins.splice(idx, 1);
         saveAdminsList(admins);
         renderAdminsList();
+    };
+
+    window.searchEmployees = function() {
+        const number = String(document.getElementById('employee-search-number')?.value || '').trim().replace(/^#/, '');
+        const login = String(document.getElementById('employee-search-login')?.value || '').trim().toLowerCase();
+        const password = String(document.getElementById('employee-search-password')?.value || '').trim();
+        const out = document.getElementById('employee-search-results');
+        if (!out) return;
+        if (!number && !login && !password) { out.innerHTML = '<span style="color:#b45309;">Qidirish uchun tartib raqami, login yoki paroldan kamida bittasini kiriting.</span>'; return; }
+        const matches = getEmployeesList().map((e,i)=>({...e,_index:i})).filter(e =>
+            (!number || String(e.number || e.id || '') === number) &&
+            (!login || String(e.login || '').trim().toLowerCase().includes(login)) &&
+            (!password || String(e.password || '').trim().includes(password))
+        );
+        if (!matches.length) { out.innerHTML = '<span style="color:#b91c1c;">Mos xodim topilmadi.</span>'; return; }
+        out.innerHTML = `<div style="color:#166534;font-weight:700;margin-bottom:5px;">Topildi: ${matches.length} ta</div>` + matches.map(e=>`<div style="display:flex;gap:8px;flex-wrap:wrap;padding:7px;background:white;border:1px solid #bbf7d0;border-radius:6px;margin-top:5px;">
+            <b style="color:#047857;">№ ${hEsc(e.number || e.id || e._index+1)}</b>
+            <span><b>F.I.Sh:</b> ${hEsc(e.name || '')}</span>
+            <span><b>Login:</b> ${hEsc(e.login || '')}</span>
+            <span><b>Parol:</b> ${hEsc(e.password || '')}</span>
+        </div>`).join('');
+    };
+    window.clearEmployeeSearch = function() {
+        ['employee-search-number','employee-search-login','employee-search-password'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+        const out=document.getElementById('employee-search-results'); if(out) out.innerHTML='';
+    };
+    window.renderEmployeesList = function() {
+        const cont = document.getElementById('employees-list-container');
+        if (!cont) return;
+        const employees = getEmployeesList();
+        if (!employees.length) {
+            cont.innerHTML = '<p style="color:#64748b;font-size:12px;margin:0;">Hozircha xodim qo‘shilmagan.</p>';
+            return;
+        }
+        cont.innerHTML = employees.map((e, i) => `<div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #ecfdf5;padding:7px 2px;">
+            <b style="min-width:48px;color:#047857;">№ ${Number(e.number || i+1)}</b>
+            <input class="gi" style="width:155px;height:32px;text-align:left;font-weight:normal;" value="${hEsc(e.name||'')}" onchange="updateEmployee(${i},'name',this.value)" placeholder="Ism familiya">
+            <input class="gi" style="width:115px;height:32px;text-align:left;font-weight:normal;" value="${hEsc(e.login||'')}" onchange="updateEmployee(${i},'login',this.value)" placeholder="Login">
+            <input class="gi" style="width:115px;height:32px;text-align:left;font-weight:normal;" value="${hEsc(e.password||'')}" onchange="updateEmployee(${i},'password',this.value)" placeholder="Parol">
+            <button class="tab-btn" style="background:#fee2e2;color:#b91c1c;border:0;padding:5px 9px;" onclick="deleteEmployee(${i})">🗑️</button>
+        </div>`).join('');
+    };
+    function saveEmployeesList(list) {
+        lsSet('employees_list', list);
+        if (window.syncEmployeesToFirebase) window.syncEmployeesToFirebase(list);
+    }
+    window.addEmployee = function() {
+        const name = document.getElementById('new-employee-name').value.trim();
+        const login = document.getElementById('new-employee-login').value.trim();
+        const password = document.getElementById('new-employee-pass').value;
+        if (!name || !login || !password) return alert('Ism-familiya, login va parolni kiriting.');
+        const list = getEmployeesList();
+        const conflict=credentialConflict(login,password,'','',-1);
+        if (conflict) {
+            if (String(conflict.login||'').trim().toLowerCase()===login.toLowerCase()) { const suggestion=suggestFreeLogin(login,'','',-1); document.getElementById('new-employee-login').value=suggestion; alert('Login va parol juftligi boshqa akkaunt bilan aynan bir xil. Tavsiya etiladigan login: '+suggestion); }
+            else { const suggestion=suggestFreePassword(password,'','',-1); document.getElementById('new-employee-pass').value=suggestion; alert('Login va parol juftligi boshqa akkaunt bilan aynan bir xil. Tavsiya etiladigan yangi parol: '+suggestion); }
+            return;
+        }
+        const number = list.reduce((m,e)=>Math.max(m,Number(e.number||0)),0)+1;
+        list.push({number, id:number, name, login, password});
+        saveEmployeesList(list);
+        ['new-employee-name','new-employee-login','new-employee-pass'].forEach(id=>document.getElementById(id).value='');
+        renderEmployeesList();
+        alert('Xodim qo‘shildi. Tartib raqami: ' + number);
+    };
+    window.updateEmployee = function(index,key,value) {
+        const list=getEmployeesList();
+        if (!list[index]) return;
+        value=String(value||'').trim();
+        if (key==='login' || key==='password') {
+            const nextLogin=key==='login'?value:list[index].login;
+            const nextPass=key==='password'?value:list[index].password;
+            const conflict=credentialConflict(nextLogin,nextPass,'','',index);
+            if(conflict){
+                if(key==='login'){const suggestion=suggestFreeLogin(value,'','',index);alert('Login va parol juftligi boshqa akkaunt bilan aynan bir xil. Tavsiya etiladigan login: '+suggestion);}
+                else {const suggestion=suggestFreePassword(value,'','',index);alert('Login va parol juftligi boshqa akkaunt bilan aynan bir xil. Tavsiya etiladigan yangi parol: '+suggestion);}
+                renderEmployeesList(); return;
+            }
+        }
+        list[index][key]=value; saveEmployeesList(list); renderEmployeesList();
+    };
+    window.deleteEmployee = function(index) {
+        if (!confirm('Xodimni o‘chirmoqchimisiz?')) return;
+        const list=getEmployeesList(); list.splice(index,1); saveEmployeesList(list); renderEmployeesList();
     };
 
     window.loadMoveStudentsList = function() {
@@ -2949,7 +3793,7 @@
 
     function setView(v) { currentView = v; localStorage.setItem('last_view', v); document.getElementById('weekly-controls').style.display = (v==='weekly') ? 'flex' : 'none'; render(); }
     function setWeeklyLayout(l) { weeklyLayout = l; localStorage.setItem('weekly_layout', l); document.getElementById('layout-vertical').classList.toggle('active-layout', l==='vertical'); document.getElementById('layout-horizontal').classList.toggle('active-layout', l==='horizontal'); render(); }
-    function setQ(q) { activeQuarter = q; localStorage.setItem('last_Q', q); render(); if (loggedStudent) renderStudentView(); }
+    function setQ(q) { activeQuarter = q; window.__manualQuarterSelection = true; localStorage.setItem('last_Q', q); render(); if (loggedStudent) renderStudentView(); }
     function onClassChange() { updateSubjectsList(); updateGroupSelect(); updateClassTeacherDisplay(document.getElementById('c-select').value); updateClassShiftDisplay(document.getElementById('c-select').value); updateSubjectTeachersDisplay(document.getElementById('c-select').value); updateTeacherInfoPanel(document.getElementById('c-select').value); render(); }
     function onSubjectChange() { localStorage.setItem('last_sub', document.getElementById('s-select').value); updateGroupSelect(); updateSubjectTeachersDisplay(document.getElementById('c-select').value); updateTeacherInfoPanel(document.getElementById('c-select').value); render(); }
     function onGroupChange() { updateSubjectTeachersDisplay(document.getElementById('c-select').value); updateTeacherInfoPanel(document.getElementById('c-select').value); render(); }
@@ -2987,7 +3831,7 @@
     }
     function saveClassTeacher() {
         const cls = document.getElementById('admin-class-teacher-select').value;
-        const name = document.getElementById('class-teacher-input').value.trim();
+        const name = resolveEmployeeNumber(document.getElementById('class-teacher-input').value);
         if (!cls) return alert('Sinf tanlang!');
         const t = getClassTeachers();
         if (name) t[cls] = name; else delete t[cls];
@@ -3226,14 +4070,15 @@
                 const markKey = dk + (col.ltShort ? '__lt_' + col.ltShort : '');
                 const mObj = getMarks(qForDate, cls, col.l.name);
                 const val = mObj[entry.key]?.[markKey] || (col.ltShort ? mObj[entry.key]?.[dk] : '') || '';
-                const cellLocked = lockTrue(locks.cells?.[entry.key]?.[col.l.name]?.[qForDate]?.[col.dIdx]);
-                const dLocked = lockTrue(locks.dates?.[col.l.name]?.[qForDate]?.[col.dIdx]);
+                const cellLocked = isCellLocked(locks, entry.key, col.l.name, qForDate, col.dIdx, col.groupIdx);
+                const dLocked = isDateLocked(locks, col.l.name, qForDate, col.dIdx, col.groupIdx);
                 const st = col.grouped
                     ? getDateTeacherForLessonType(dtT,cls,col.l.name,qForDate,col.dIdx,col.groupIdx,col.ltShort)
                     : (dtT[`${cls}_${col.l.name}_${qForDate}_d_${col.dIdx}`] || '');
-                const hasA = st ? checkAccess(st) : isAllowedForStudent(cls, col.l.name, col.l, entry.name);
+                const grantAccess = getEmployeeJournalGrant(cls, col.l.name, col.groupIdx, isoOfDate(dt));
+                const hasA = grantAccess.found ? grantAccess.allowed : (st ? checkAccess(st) : isAllowedForStudent(cls, col.l.name, col.l, entry.name));
                 const ro = !hasA || dLocked || cellLocked;
-                h += `<td class="${isToday?'is-today-cell':''}"><input type="text" class="gi ${val?'has-value':''} ${ro?'locked':''}" style="${ro?'':getGradeStyle(val)}" value="${hEsc(val)}" ${ro?'disabled':''} onchange="saveM('${jEsc(qForDate)}','${jEsc(cls)}','${jEsc(col.l.name)}','${jEsc(entry.key)}',${col.dIdx},this.value${col.ltShort?`, '${jEsc(col.ltShort)}'`:''},${col.groupIdx})"></td>`;
+                h += `<td class="${isToday?'is-today-cell':''}"><input type="text" class="gi ${val?'has-value':''} ${ro?'locked':''}" style="${getGradeStyle(val)}" value="${hEsc(val)}" ${ro?'disabled':''} onchange="saveM('${jEsc(qForDate)}','${jEsc(cls)}','${jEsc(col.l.name)}','${jEsc(entry.key)}',${col.dIdx},this.value${col.ltShort?`, '${jEsc(col.ltShort)}'`:''},${col.groupIdx})"></td>`;
             });
             h += `</tr>`;
         });
@@ -3309,12 +4154,13 @@
                 const mObj = getMarks(qForDate, cls, l.name);
                 const markKeyForColumn = dk ? dk + (ltShort ? '__lt_' + ltShort : '') : '';
                 const val = (markKeyForColumn && mObj[studentKey]) ? (mObj[studentKey][markKeyForColumn] || (ltShort ? mObj[studentKey][dk] : '') || '') : '';
-                const cellLocked = lockTrue(locks.cells?.[studentKey]?.[l.name]?.[qForDate]?.[dIdx]);
-                const dLocked = lockTrue(locks.dates?.[l.name]?.[qForDate]?.[dIdx]);
+                const cellLocked = isCellLocked(locks, studentKey, l.name, qForDate, dIdx, selectedGroupIdx);
+                const dLocked = isDateLocked(locks, l.name, qForDate, dIdx, selectedGroupIdx);
                 const st = selectedGroupIdx >= 0 ? getDateTeacherForLessonType(dtT,cls,l.name,qForDate,dIdx,selectedGroupIdx,ltShort) : (dtT[`${cls}_${l.name}_${qForDate}_d_${dIdx}`] || '');
-                const hasA = st ? checkAccess(st) : isAllowedForStudent(cls, l.name, l, studentName);
+                const grantAccess = getEmployeeJournalGrant(cls, l.name, useGroupIdx, isoDate);
+                const hasA = grantAccess.found ? grantAccess.allowed : (st ? checkAccess(st) : isAllowedForStudent(cls, l.name, l, studentName));
                 const ro = !hasA || dLocked || cellLocked;
-                const styleAttr = ro ? '' : getGradeStyle(val);
+                const styleAttr = getGradeStyle(val);
                 const hv = val ? 'has-value' : '';
                 const ltArg = ltShort ? `,'${jEsc(ltShort)}'` : '';
                 h += `<td class="${isToday?'is-today-cell':''}" style="position:relative;"><input type="text" class="gi ${hv} ${ro?'locked':''}" style="${styleAttr}" value="${hEsc(val)}" ${ro?'disabled':''} onchange="saveM('${jEsc(qForDate)}','${jEsc(cls)}','${jEsc(l.name)}','${jEsc(studentKey)}',${dIdx},this.value${ltArg},${useGroupIdx})"></td>`;
@@ -3364,33 +4210,77 @@
 
     // Yopilgan yoki boshqa ustozga biriktirilgan guruh/sana ustunida
     // dars turlarini o'zgartirishga ruxsat berilmaydi.
+    function getDateForColumn(cls, sub, q, dIdx) {
+        const qObj = getQuarters().find(x => String(x.id) === String(q));
+        if (!qObj || !qObj.start) return '';
+        const d = new Date(qObj.start + 'T00:00:00'); d.setDate(d.getDate() + Number(dIdx||0));
+        return isoOfDate(d);
+    }
     function canManageLessonTypesForColumn(cls, sub, q, dIdx, groupIdx) {
+        // Admin panelda xodim tartib raqamiga berilgan ruxsat biriktirish va sana qulflaridan ustun turadi.
+        const current = String(teacher || localStorage.getItem('loggedTeacher') || '').trim();
+        const currentEmpNo = String(localStorage.getItem('loggedEmployeeId') || '').trim();
+        const norm = value => String(value || '').trim().toLocaleLowerCase('uz');
+        const adminGrant = getAdminsList().find(a =>
+            (currentEmpNo && a.employeeNumber && String(a.employeeNumber) === currentEmpNo) ||
+            (current && norm(a.name) === norm(current))
+        );
+        if (adminGrant) {
+            const matches = (stored, value) => {
+                const list = String(stored || '').split(',').map(x=>norm(x)).filter(Boolean);
+                return !list.length || list.includes(norm(value));
+            };
+            const groups = lsGet(`groups_${cls}_${sub}`, []) || [];
+            const gi = Number(groupIdx);
+            const groupName = Number.isInteger(gi) && gi >= 0 && groups[gi] ? groups[gi].name : '';
+            const types = getLessonTypesForColumn(cls, sub, q, dIdx, groupIdx);
+            const permittedTypes = String(adminGrant.lessontypes || '').split(',').map(x=>x.trim()).filter(Boolean);
+            const typeOK = !permittedTypes.length || (types.length ? types.some(t=>permittedTypes.some(pt=>norm(pt)===norm(t))) : getLessonTypes().some(t=>permittedTypes.some(pt=>norm(pt)===norm(t.short))));
+            const date = getDateForColumn(cls, sub, q, dIdx);
+            const scopeOK = matches(adminGrant.classes, cls) && matches(adminGrant.subjects, sub) &&
+                matches(adminGrant.groups, groupName) && matches(adminGrant.dates, date);
+            if (scopeOK && typeOK) return true;
+        }
+        // Faqat kirgan ustozga aynan shu fan/sinf/guruh/sana biriktirilgan
+        // bo'lsa ruxsat beriladi. Sinf rahbarligi boshqa fanlarga huquq bermaydi.
         const locks = (lsGet('lock_settings', {}) || {})[cls] || {};
-        if (lockTrue(locks.dates?.[sub]?.[q]?.[dIdx])) return false;
+        if (isDateLocked(locks, sub, q, dIdx, groupIdx)) return false;
 
+        const currentTeacherName = current;
+        if (!currentTeacherName) return false;
+        const matchesCurrent = value => String(value || '').split(',')
+            .map(x => norm(x)).filter(Boolean).includes(norm(currentTeacherName));
+
+        const assignedTeachers = [];
+        const addTeacher = value => {
+            if (value && String(value).trim()) assignedTeachers.push(value);
+        };
+
+        // Aynan tanlangan fan uchun biriktirilgan ustoz.
+        const subject = (getClassSubjectsRaw(cls) || []).find(x =>
+            x && norm(x.name) === norm(sub)
+        );
+        addTeacher(subject && subject.teacher);
+
+        // Tanlangan guruhga biriktirilgan ustoz.
         const gi = Number(groupIdx);
         const groups = lsGet(`groups_${cls}_${sub}`, []) || [];
-        const dt = lsGet('date_teachers', {}) || {};
-
         if (Number.isInteger(gi) && gi >= 0) {
             const group = groups[gi];
-            if (!group) return false;
-            if (group.teacher && !checkAccess(group.teacher)) return false;
-
-            // Guruh/sana uchun umumiy yoki dars turi kesimidagi biriktirishlar.
-            const generic = dt[groupDateTeacherKey(cls, sub, q, dIdx, gi)] || '';
-            if (generic && !checkAccess(generic)) return false;
-
-            const types = getLessonTypesForColumn(cls, sub, q, dIdx, gi);
-            for (const type of types) {
-                const specific = dt[groupDateTeacherKey(cls, sub, q, dIdx, gi, type)] || '';
-                if (specific && !checkAccess(specific)) return false;
-            }
-        } else {
-            const assigned = dt[`${cls}_${sub}_${q}_d_${dIdx}`] || '';
-            if (assigned && !checkAccess(assigned)) return false;
+            if (group) addTeacher(group.teacher);
         }
-        return true;
+
+        // Aynan shu sinf/fan/sana va guruh/sana uchun biriktirilgan ustoz.
+        const dt = lsGet('date_teachers', {}) || {};
+        addTeacher(dt[`${cls}_${sub}_${q}_d_${dIdx}`]);
+        if (Number.isInteger(gi) && gi >= 0) {
+            addTeacher(dt[groupDateTeacherKey(cls, sub, q, dIdx, gi)]);
+            (getLessonTypesForColumn(cls, sub, q, dIdx, gi) || []).forEach(type =>
+                addTeacher(dt[groupDateTeacherKey(cls, sub, q, dIdx, gi, type)])
+            );
+        }
+
+        return assignedTeachers.some(matchesCurrent);
     }
 
     window.openLessonTypesManager = function(cls, sub, q, dIdx, dateStr, lessonIdx, groupIdx) {
@@ -3408,8 +4298,12 @@
         }
         const currentArr = getLessonTypesForColumn(cls, sub, q, dIdx, groupIdx);
         const groupName = groupIdx >= 0 ? ((lsGet(`groups_${cls}_${sub}`, [])[groupIdx] || {}).name || `Guruh ${groupIdx+1}`) : 'Umumiy';
+        const loggedNo=String(localStorage.getItem('loggedEmployeeId')||'');
+        const loggedName=String(teacher||localStorage.getItem('loggedTeacher')||'').trim().toLocaleLowerCase('uz');
+        const grant=getAdminsList().find(a=>(loggedNo && a.employeeNumber && String(a.employeeNumber)===loggedNo)||(loggedName && String(a.name||'').trim().toLocaleLowerCase('uz')===loggedName));
+        const allowedTypeCodes=grant && String(grant.lessontypes||'').trim() ? String(grant.lessontypes).split(',').map(x=>x.trim()) : null;
         let checkboxes = '';
-        lessonTypes.forEach(t => {
+        lessonTypes.filter(t=>!allowedTypeCodes || allowedTypeCodes.some(x=>x.toLocaleLowerCase('uz')===String(t.short).toLocaleLowerCase('uz'))).forEach(t => {
             const checked = currentArr.includes(t.short) ? 'checked' : '';
             const primaryMark = t.primary ? ' ★' : '';
             checkboxes += `<label class="lt-checkbox-item">
@@ -3441,6 +4335,11 @@
         const checkboxes = document.querySelectorAll('#lt-checkbox-list input[type="checkbox"]');
         const selected = [];
         checkboxes.forEach(cb => { if (cb.checked) selected.push(cb.value); });
+        const loggedNo=String(localStorage.getItem('loggedEmployeeId')||'');
+        const loggedName=String(teacher||localStorage.getItem('loggedTeacher')||'').trim().toLocaleLowerCase('uz');
+        const grant=getAdminsList().find(a=>(loggedNo && a.employeeNumber && String(a.employeeNumber)===loggedNo)||(loggedName && String(a.name||'').trim().toLocaleLowerCase('uz')===loggedName));
+        const allowedTypeCodes=grant && String(grant.lessontypes||'').trim() ? String(grant.lessontypes).split(',').map(x=>x.trim().toLocaleLowerCase('uz')) : null;
+        if (allowedTypeCodes && selected.some(x=>!allowedTypeCodes.includes(String(x).toLocaleLowerCase('uz')))) { alert('Sizga ruxsat berilmagan dars turi tanlandi.'); return; }
         // Dars turi tahrirlanganda baholar bazasiga tegilmaydi.
         // Mavjud baholar ko'chirilmaydi, o'chirilmaydi va qayta yozilmaydi.
         setLessonTypesForColumn(cls, sub, q, dIdx, selected, Number.isInteger(Number(groupIdx)) ? Number(groupIdx) : -1);
@@ -3497,12 +4396,12 @@
                     if (col.ltShort) dk += '__lt_' + col.ltShort;
                     const val = marksAll[studentKey]?.[dk] || (col.ltShort ? (marksAll[studentKey]?.[dateKey(col.d)] || '') : '') || '';
                     if (val && !isNaN(val)) rowVals.push(parseFloat(val));
-                    const dLocked = lockTrue(locksAll.dates?.[sub]?.[activeQuarter]?.[col.dIdx]);
-                    const cLocked = lockTrue(locksAll.cells?.[studentKey]?.[sub]?.[activeQuarter]?.[col.dIdx]);
+                    const dLocked = isDateLocked(locksAll, sub, activeQuarter, col.dIdx, col.groupIdx);
+                    const cLocked = isCellLocked(locksAll, studentKey, sub, activeQuarter, col.dIdx, col.groupIdx);
                     const st = getDateTeacherForLessonType(dtTeachersAll,cls,sub,activeQuarter,col.dIdx,col.groupIdx,col.ltShort);
                     const hasA = st ? checkAccess(st) : isAllowedForStudent(cls, sub, subObj, entry.name);
                     const ro = !hasA || dLocked || cLocked;
-                    const styleAttr = ro ? '' : getGradeStyle(val);
+                    const styleAttr = getGradeStyle(val);
                     const ltArg = col.ltShort ? `,'${jEsc(col.ltShort)}'` : '';
                     combined += `<td class="${col.d.date===todayAll?'is-today-cell ':''}${col.ltShort?'lt-col-cell':''}"><input type="text" class="gi ${val?'has-value':''} ${ro?'locked':''}" style="${styleAttr}" value="${hEsc(val)}" ${ro?'disabled':''} onchange="saveM('${jEsc(activeQuarter)}','${jEsc(cls)}','${jEsc(sub)}','${jEsc(studentKey)}',${col.dIdx},this.value${ltArg},${col.groupIdx})"></td>`;
                 });
@@ -3512,7 +4411,7 @@
                 const qt = dtTeachersAll[`${cls}_${sub}_${activeQuarter}_quarter`] || '';
                 const hasQ = qt ? checkAccess(qt) : isAllowedForStudent(cls, sub, subObj, entry.name);
                 const roQ = !hasQ || qLocked;
-                combined += `<td class="avg-cell">${avg}</td><td><input type="text" class="gi ${qVal?'has-value':''} ${roQ?'locked':''}" style="${roQ?'':getGradeStyle(qVal)}" value="${hEsc(qVal)}" ${roQ?'disabled':''} onchange="saveMQ('${jEsc(activeQuarter)}','${jEsc(cls)}','${jEsc(sub)}','${jEsc(studentKey)}',this.value)"></td></tr>`;
+                combined += `<td class="avg-cell">${avg}</td><td><input type="text" class="gi ${qVal?'has-value':''} ${roQ?'locked':''}" style="${getGradeStyle(qVal)}" value="${hEsc(qVal)}" ${roQ?'disabled':''} onchange="saveMQ('${jEsc(activeQuarter)}','${jEsc(cls)}','${jEsc(sub)}','${jEsc(studentKey)}',this.value)"></td></tr>`;
             });
             return combined + `</tbody></table>`;
         }
@@ -3557,12 +4456,12 @@
                 if (col.ltShort) dk += '__lt_' + col.ltShort;
                 const val = marks[studentKey]?.[dk] || (col.ltShort ? (marks[studentKey]?.[dateKey(col.d)] || '') : '') || '';
                 if (val && !isNaN(val)) row.push(parseFloat(val));
-                const dLocked = lockTrue(locks.dates?.[sub]?.[activeQuarter]?.[col.dIdx]);
-                const cLocked = lockTrue(locks.cells?.[studentKey]?.[sub]?.[activeQuarter]?.[col.dIdx]);
+                const dLocked = isDateLocked(locks, sub, activeQuarter, col.dIdx, selectedGroupIdx);
+                const cLocked = isCellLocked(locks, studentKey, sub, activeQuarter, col.dIdx, selectedGroupIdx);
                 const st = selectedGroupIdx >= 0 ? getDateTeacherForLessonType(dtT,cls,sub,activeQuarter,col.dIdx,selectedGroupIdx,col.ltShort) : (dtT[`${cls}_${sub}_${activeQuarter}_d_${col.dIdx}`] || '');
                 const hasA = st ? checkAccess(st) : isAllowedForStudent(cls, sub, subObj, studentName);
                 const ro = !hasA || dLocked || cLocked;
-                const styleAttr = ro ? '' : getGradeStyle(val);
+                const styleAttr = getGradeStyle(val);
                 const hv = val ? 'has-value' : '';
                 const ltArg = col.ltShort ? `,'${jEsc(col.ltShort)}'` : '';
                 const tdClass = (col.d.date===today?'is-today-cell ':'') + (col.ltShort ? 'lt-col-cell' : '');
@@ -3574,7 +4473,7 @@
             const qt = dtT[`${cls}_${sub}_${activeQuarter}_quarter`] || '';
             const hasQ = qt ? checkAccess(qt) : isAllowedForStudent(cls, sub, subObj, studentName);
             const roQ = !hasQ || qLocked;
-            const qStyle = roQ ? '' : getGradeStyle(qVal);
+            const qStyle = getGradeStyle(qVal);
             const qHv = qVal ? 'has-value' : '';
             h += `<td class="avg-cell">${avg}</td><td><input type="text" class="gi ${qHv} ${roQ?'locked':''}" style="${qStyle}" value="${hEsc(qVal)}" ${roQ?'disabled':''} onchange="saveMQ('${jEsc(activeQuarter)}','${jEsc(cls)}','${jEsc(sub)}','${jEsc(studentKey)}',this.value)"></td></tr>`;
         });
@@ -3627,11 +4526,21 @@
     window.saveM = function(q, cls, sub, studentKey, dIdx, val, ltShort, groupIdx) {
         if (!studentKey) return;
         const gi = Number.isInteger(Number(groupIdx)) ? Number(groupIdx) : -1;
+        const groupList = (lsGet(`groups_${cls}_${sub}`, []) || []);
+        window.__gradeAuditContext = {teacher: teacher || '', group: gi >= 0 ? (groupList[gi]?.name || `Guruh ${gi+1}`) : ''};
         const dates = generateDates(cls, sub, q, gi);
         const d = dates[dIdx];
         if (!d) return;
+        const dateIsoForGrant = d.iso || getDateForColumn(cls, sub, q, dIdx);
+        const grantAccess = getEmployeeJournalGrant(cls, sub, gi, dateIsoForGrant);
+        if (grantAccess.found && !grantAccess.allowed) {
+            alert(grantAccess.reason || 'Bu sana uchun baho qo‘yishga ruxsat yo‘q.');
+            render();
+            return;
+        }
         const baseKey = dateKey(d);
         const m = getMarks(q, cls, sub);
+        window.__gradeAuditBefore = JSON.parse(JSON.stringify(m || {}));
         if (!m[studentKey]) m[studentKey] = {};
         const row = m[studentKey];
         const v = (val||'').toUpperCase().trim();
@@ -3679,7 +4588,9 @@
     };
     window.saveMQ = function(q, cls, sub, studentKey, val) {
         if (!studentKey) return;
+        window.__gradeAuditContext = {teacher: teacher || '', group: ''};
         const m = getMarks(q, cls, sub);
+        window.__gradeAuditBefore = JSON.parse(JSON.stringify(m || {}));
         if (!m[studentKey]) m[studentKey] = {};
         const v = (val||'').toUpperCase().trim();
         if (!m[studentKey].__meta || typeof m[studentKey].__meta !== 'object') m[studentKey].__meta = {};
@@ -3843,7 +4754,7 @@
             html += `<div style="margin:14px 0 10px;padding:11px 13px;background:#eef2ff;border-left:4px solid #4361ee;border-radius:8px;font-weight:800;color:#312e81;">${groupTitle}</div>`;
             dates.forEach((d, i) => {
                 const isToday = d.date === today;
-                const locked = lockTrue(locks.dates?.[sub]?.[activeQuarter]?.[i]);
+                const locked = isDateLocked(locks, sub, activeQuarter, i, index);
                 // Mavzu/uy vazifasiga ruxsat: fan, guruh, sana yoki
                 // sana+guruh+dars turi bo'yicha biriktirilgan ustozlarning
                 // istalgan biri shu yozuvni tahrirlashi mumkin.
@@ -3938,7 +4849,7 @@
         const sub = document.getElementById('s-select').value;
         const groups = lsGet(`groups_${cls}_${sub}`, []);
         if (groups[gIdx]) {
-            groups[gIdx][key] = val;
+            groups[gIdx][key] = key === 'teacher' ? resolveEmployeeNumber(val) : val;
             lsSet(`groups_${cls}_${sub}`, groups);
             window.syncGroupsToFirebase(cls, sub, groups);
             updateGroupSelect();
@@ -3997,6 +4908,7 @@
         renderQuartersAdmin();
         renderStudentQuarterList();
         renderAdminsList();
+        renderEmployeesList();
         if (typeof loadBellSubjectSelect === 'function') loadBellSubjectSelect();
         if (typeof renderBellEditor === 'function') renderBellEditor();
         if (typeof loadRoomSubjectSelect === 'function') loadRoomSubjectSelect();
@@ -4289,7 +5201,7 @@
         const q = document.getElementById('assign-teacher-quarter')?.value || activeQuarter;
         const groupIdx = Number(document.getElementById('assign-teacher-group')?.value ?? -1);
         const dIdx = Number(document.getElementById('assign-teacher-date')?.value);
-        const name = document.getElementById('assign-teacher-name')?.value.trim();
+        const name = resolveEmployeeNumber(document.getElementById('assign-teacher-name')?.value);
         const lessonType = document.getElementById('assign-teacher-lesson-type')?.value || '';
         if (!cls || !sub || !name || !Number.isInteger(dIdx) || dIdx < 0) return alert('Sinf, fan, sana va ustozni to‘liq tanlang.');
         const data = lsGet('date_teachers', {}) || {};
@@ -4397,7 +5309,7 @@
     window.addNewClassSubject = function() {
         const cls = document.getElementById('swap-class-select').value;
         const name = document.getElementById('new-sub-name').value.trim();
-        const teacher = document.getElementById('new-sub-teacher').value.trim();
+        const teacher = resolveEmployeeNumber(document.getElementById('new-sub-teacher').value);
         const daysRaw = document.getElementById('new-sub-days').value.trim();
         if (!cls || !name) return alert("Sinf va fan!");
         const days = daysRaw ? daysRaw.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n)) : [1,3,5];
@@ -4413,7 +5325,7 @@
     window.updateClassSubjectInfo = function(cls, idx, key, val) {
         const classSubs = getClassSubjectsRaw(cls);
         if (classSubs[idx]) {
-            classSubs[idx][key] = val;
+            classSubs[idx][key] = key === 'teacher' ? resolveEmployeeNumber(val) : val;
             lsSet(`class_subs_${cls}`, classSubs);
             window.syncClassSubsToFirebase(cls, classSubs);
             updateSubjectsList(); render();
@@ -4465,7 +5377,7 @@
         const subSel = document.getElementById('lock-sub-select');
         const oldSub = subSel.value;
         subSel.innerHTML = '';
-        classSubs.forEach(s => subSel.add(new Option(s.name, s.name)));
+        classSubs.forEach(x => subSel.add(new Option(x.name, x.name)));
         if (oldSub && Array.from(subSel.options).some(o => o.value === oldSub)) subSel.value = oldSub;
         ['lock-cell-q-select','lock-q-select'].forEach(id => {
             const qSel = document.getElementById(id); if (!qSel) return;
@@ -4474,104 +5386,248 @@
             if (oldQ && Array.from(qSel.options).some(o => o.value === oldQ)) qSel.value = oldQ;
             else if (Array.from(qSel.options).some(o => o.value === activeQuarter)) qSel.value = activeQuarter;
         });
+        const studentSel = document.getElementById('lock-cell-student-select');
+        if (studentSel) {
+            const old = studentSel.value;
+            studentSel.innerHTML = '<option value="__all">Barcha o‘quvchilar</option>';
+            getSortedStudentEntries(cls, true).forEach(st => studentSel.add(new Option(st.name, st.key)));
+            if (old && Array.from(studentSel.options).some(o => o.value === old)) studentSel.value = old;
+        }
+        const multi = document.getElementById('lock-cell-subjects');
+        if (multi) {
+            const old = Array.from(multi.selectedOptions).map(o => o.value);
+            multi.innerHTML = '';
+            classSubs.forEach(x => multi.add(new Option(x.name, x.name)));
+            Array.from(multi.options).forEach(o => { if (old.includes(o.value) || o.value === subSel.value) o.selected = true; });
+        }
+        const dateMulti = document.getElementById('lock-date-subjects');
+        if (dateMulti) {
+            const old = Array.from(dateMulti.selectedOptions).map(o => o.value);
+            dateMulti.innerHTML = '';
+            classSubs.forEach(x => dateMulti.add(new Option(x.name, x.name)));
+            Array.from(dateMulti.options).forEach(o => { o.selected = old.includes(o.value) || o.value === subSel.value; });
+        }
+        loadLockGroupSelects();
         loadLockSettingsData();
     };
+    window.loadLockGroupSelects = function() {
+        const cls = document.getElementById('lock-class-select')?.value;
+        const sub = document.getElementById('lock-sub-select')?.value;
+        if (!cls || !sub) return;
+        const groups = lsGet(`groups_${cls}_${sub}`, []) || [];
+        ['lock-date-group-select','lock-cell-group-select'].forEach(id => {
+            const el = document.getElementById(id); if (!el) return;
+            const old = el.value;
+            el.innerHTML = '<option value="-1">Barcha guruhlar</option>';
+            groups.forEach((g,i) => el.add(new Option(g.name || `Guruh ${i+1}`, String(i))));
+            if (old && Array.from(el.options).some(o => o.value === old)) el.value = old;
+        });
+    };
     window.loadLockSettingsData = function() {
-        loadLockCellsList(); loadLockDatesList();
+        loadLockGroupSelects(); loadLockCellsList(); loadLockDatesList();
     };
     window.loadLockCellsList = function() {
         const cls = document.getElementById('lock-class-select').value;
         const sub = document.getElementById('lock-sub-select').value;
         const q = document.getElementById('lock-cell-q-select').value;
+        const gi = Number(document.getElementById('lock-cell-group-select')?.value ?? -1);
+        const studentFilter = document.getElementById('lock-cell-student-select')?.value || '__all';
         const cont = document.getElementById('lock-cells-students-list');
         if (!cls || !sub) { cont.innerHTML = ''; return; }
-        const students = getSortedStudentEntries(cls, true);
-        const locks = lsGet('lock_settings', {})[cls]?.cells || {};
-        const dates = generateDates(cls, sub, q);
+        const students = getSortedStudentEntries(cls, true).filter(st => studentFilter === '__all' || st.key === studentFilter);
+        const locks = lsGet('lock_settings', {})[cls] || {};
+        const dates = generateDates(cls, sub, q, gi);
         let html = '';
         students.forEach(st => {
             let chks = '';
-            dates.forEach((d, dIdx) => {
-                const isL = lockTrue(locks[st.key]?.[sub]?.[q]?.[dIdx]);
-                chks += `<label style="font-size:10px; margin-right:4px;"><input type="checkbox" ${isL?'checked':''} onchange="toggleLockCell('${jEsc(cls)}','${jEsc(st.key)}','${jEsc(sub)}','${jEsc(q)}',${dIdx},this.checked)">${hEsc(d.date)}</label>`;
+            dates.forEach((d, idx) => {
+                const on = isCellLocked(locks, st.key, sub, q, idx, gi);
+                chks += `<label style="font-size:10px;margin-right:4px;"><input type="checkbox" ${on?'checked':''} onchange="toggleLockCell('${jEsc(cls)}','${jEsc(st.key)}','${jEsc(sub)}','${jEsc(q)}',${idx},this.checked,${gi})">${hEsc(d.date)}</label>`;
             });
-            html += `<div style="font-size:11px; margin-bottom:4px; border-bottom:1px solid #f1f5f9; padding-bottom:3px;"><b>${hEsc(st.name)}</b>: ${chks}</div>`;
+            html += `<div style="font-size:11px;margin-bottom:4px;border-bottom:1px solid #f1f5f9;padding-bottom:3px;"><b>${hEsc(st.name)}</b>: ${chks}</div>`;
         });
         cont.innerHTML = html;
     };
-    window.toggleLockCell = function(cls, studentKey, sub, q, dIdx, locked) {
-        const allLocks = lsGet('lock_settings', {});
-        if (!allLocks[cls]) allLocks[cls] = {};
-        if (!allLocks[cls].cells) allLocks[cls].cells = {};
-        if (!allLocks[cls].cells[studentKey]) allLocks[cls].cells[studentKey] = {};
-        if (!allLocks[cls].cells[studentKey][sub]) allLocks[cls].cells[studentKey][sub] = {};
-        if (!allLocks[cls].cells[studentKey][sub][q]) allLocks[cls].cells[studentKey][sub][q] = {};
-        if (locked) allLocks[cls].cells[studentKey][sub][q][dIdx] = true;
-        else delete allLocks[cls].cells[studentKey][sub][q][dIdx];
-        lsSet('lock_settings', allLocks);
-        window.syncLockSettingsToFirebase(allLocks);
-        render();
+    window.toggleLockCell = function(cls, studentKey, sub, q, idx, locked, gi=-1) {
+        const all = lsGet('lock_settings', {});
+        if (!all[cls]) all[cls] = {};
+        if (!all[cls].cells) all[cls].cells = {};
+        if (!all[cls].cells[studentKey]) all[cls].cells[studentKey] = {};
+        if (!all[cls].cells[studentKey][sub]) all[cls].cells[studentKey][sub] = {};
+        if (!all[cls].cells[studentKey][sub][q]) all[cls].cells[studentKey][sub][q] = {};
+        const b = all[cls].cells[studentKey][sub][q];
+        if (Number(gi) >= 0) {
+            if (!b.groups) b.groups = {};
+            if (!b.groups[String(gi)]) b.groups[String(gi)] = {};
+            if (locked) b.groups[String(gi)][idx] = true; else delete b.groups[String(gi)][idx];
+        } else {
+            if (locked) b[idx] = true; else delete b[idx];
+        }
+        all.__ts = Date.now(); lsSet('lock_settings', all);
+        window.syncLockSettingsToFirebase(all); loadLockCellsList(); render(); showSaved();
+    };
+    window.applyStudentCellLocksUntil = function() {
+        const cls = document.getElementById('lock-class-select')?.value;
+        const q = document.getElementById('lock-cell-q-select')?.value;
+        const until = document.getElementById('lock-cell-until-date')?.value;
+        const studentKey = document.getElementById('lock-cell-student-select')?.value || '__all';
+        const gi = Number(document.getElementById('lock-cell-group-select')?.value ?? -1);
+        const subjects = Array.from(document.getElementById('lock-cell-subjects')?.selectedOptions || []).map(o => o.value);
+        if (!cls || !q || !until || !subjects.length) return alert('Chorak, fan(lar) va oxirgi sanani tanlang.');
+        const all = lsGet('lock_settings', {}) || {};
+        if (!all[cls]) all[cls] = {};
+        if (!all[cls].cells) all[cls].cells = {};
+        const students = getSortedStudentEntries(cls, true).filter(st => studentKey === '__all' || st.key === studentKey);
+        let count = 0;
+        subjects.forEach(sub => generateDates(cls, sub, q, gi).forEach((d, idx) => {
+            if (!d.iso || d.iso > until) return;
+            students.forEach(st => {
+                if (!all[cls].cells[st.key]) all[cls].cells[st.key] = {};
+                if (!all[cls].cells[st.key][sub]) all[cls].cells[st.key][sub] = {};
+                if (!all[cls].cells[st.key][sub][q]) all[cls].cells[st.key][sub][q] = {};
+                const b = all[cls].cells[st.key][sub][q];
+                if (gi >= 0) {
+                    if (!b.groups) b.groups = {};
+                    if (!b.groups[String(gi)]) b.groups[String(gi)] = {};
+                    b.groups[String(gi)][idx] = true;
+                } else b[idx] = true;
+                count++;
+            });
+        }));
+        all.__ts = Date.now(); lsSet('lock_settings', all);
+        if (typeof window.syncLockSettingsToFirebase === 'function') window.syncLockSettingsToFirebase(all);
+        const status = document.getElementById('lock-cell-until-status');
+        if (status) status.textContent = `✅ ${count} ta o‘quvchi katagi ${until} gacha qulflandi.`;
+        loadLockCellsList(); render(); showSaved();
+    };
+    window.unlockStudentCellLocksUntil = function() {
+        const cls = document.getElementById('lock-class-select')?.value;
+        const q = document.getElementById('lock-cell-q-select')?.value;
+        const until = document.getElementById('lock-cell-until-date')?.value;
+        const studentKey = document.getElementById('lock-cell-student-select')?.value || '__all';
+        const gi = Number(document.getElementById('lock-cell-group-select')?.value ?? -1);
+        const subjects = Array.from(document.getElementById('lock-cell-subjects')?.selectedOptions || []).map(o => o.value);
+        if (!cls || !q || !until || !subjects.length) return alert('Chorak, fan(lar) va oxirgi sanani tanlang.');
+        const all = lsGet('lock_settings', {}) || {};
+        const students = getSortedStudentEntries(cls, true).filter(st => studentKey === '__all' || st.key === studentKey);
+        let count = 0;
+        subjects.forEach(sub => generateDates(cls, sub, q, gi).forEach((d, idx) => {
+            if (!d.iso || d.iso > until) return;
+            students.forEach(st => {
+                const b = all[cls]?.cells?.[st.key]?.[sub]?.[q];
+                if (!b) return;
+                if (gi >= 0) {
+                    if (b.groups?.[String(gi)]) delete b.groups[String(gi)][idx];
+                } else {
+                    delete b[idx];
+                    if (b.groups) Object.values(b.groups).forEach(g => { if (g) delete g[idx]; });
+                }
+                count++;
+            });
+        }));
+        all.__ts = Date.now(); lsSet('lock_settings', all);
+        if (typeof window.syncLockSettingsToFirebase === 'function') window.syncLockSettingsToFirebase(all);
+        const status = document.getElementById('lock-cell-until-status');
+        if (status) status.textContent = `🔓 ${count} ta o‘quvchi katagi ${until} gacha ochildi.`;
+        loadLockCellsList(); render(); showSaved();
     };
     window.applyLockUntilDate = function() {
         const cls = document.getElementById('lock-class-select')?.value;
-        const sub = document.getElementById('lock-sub-select')?.value;
         const q = document.getElementById('lock-q-select')?.value;
         const until = document.getElementById('lock-until-date')?.value;
-        if (!cls || !sub || !q || !until) return alert('Sinf, fan, chorak va oxirgi sanani tanlang.');
-        const dates = generateDates(cls, sub, q);
-        const selectedIndex = dates.findIndex(d => d.iso === until);
-        if (selectedIndex < 0) return alert('Tanlangan sana ushbu fan jadvalida topilmadi. Sana jadvalidagi kunlardan birini tanlang.');
-        const allLocks = lsGet('lock_settings', {}) || {};
-        if (!allLocks[cls]) allLocks[cls] = {};
-        if (!allLocks[cls].dates) allLocks[cls].dates = {};
-        if (!allLocks[cls].dates[sub]) allLocks[cls].dates[sub] = {};
-        if (!allLocks[cls].dates[sub][q]) allLocks[cls].dates[sub][q] = {};
+        const gi = Number(document.getElementById('lock-date-group-select')?.value ?? -1);
+        const subjects = Array.from(document.getElementById('lock-date-subjects')?.selectedOptions || []).map(o => o.value);
+        if (!cls || !q || !until || !subjects.length) return alert('Sinf, chorak, fan(lar) va oxirgi sanani tanlang.');
+        const all = lsGet('lock_settings', {}) || {};
+        if (!all[cls]) all[cls] = {};
+        if (!all[cls].dates) all[cls].dates = {};
         let count = 0;
-        dates.forEach((d, idx) => {
-            if (d.iso && d.iso <= until) {
-                allLocks[cls].dates[sub][q][idx] = true;
+        subjects.forEach(sub => {
+            const dates = generateDates(cls, sub, q, gi);
+            if (!all[cls].dates[sub]) all[cls].dates[sub] = {};
+            if (!all[cls].dates[sub][q]) all[cls].dates[sub][q] = {};
+            const b = all[cls].dates[sub][q];
+            dates.forEach((d, idx) => {
+                if (!d.iso || d.iso > until) return;
+                if (gi >= 0) {
+                    if (!b.groups) b.groups = {};
+                    if (!b.groups[String(gi)]) b.groups[String(gi)] = {};
+                    b.groups[String(gi)][idx] = true;
+                } else b[idx] = true;
                 count++;
-            }
+            });
         });
-        allLocks.__ts = Date.now();
-        lsSet('lock_settings', allLocks);
-        if (typeof window.syncLockSettingsToFirebase === 'function') window.syncLockSettingsToFirebase(allLocks);
+        all.__ts = Date.now(); lsSet('lock_settings', all);
+        if (typeof window.syncLockSettingsToFirebase === 'function') window.syncLockSettingsToFirebase(all);
         const status = document.getElementById('lock-until-status');
-        if (status) status.textContent = `✅ ${count} ta sana ${until} gacha qulflandi.`;
-        loadLockDatesList();
-        render();
-        showSaved();
+        if (status) status.textContent = `✅ ${subjects.length} ta fan bo‘yicha ${count} ta sana ${until} gacha qulflandi${gi >= 0 ? ' (tanlangan guruh)' : ''}.`;
+        loadLockDatesList(); render(); showSaved();
     };
-
+    window.unlockLockUntilDate = function() {
+        const cls = document.getElementById('lock-class-select')?.value;
+        const q = document.getElementById('lock-q-select')?.value;
+        const until = document.getElementById('lock-until-date')?.value;
+        const gi = Number(document.getElementById('lock-date-group-select')?.value ?? -1);
+        const subjects = Array.from(document.getElementById('lock-date-subjects')?.selectedOptions || []).map(o => o.value);
+        if (!cls || !q || !until || !subjects.length) return alert('Sinf, chorak, fan(lar) va oxirgi sanani tanlang.');
+        const all = lsGet('lock_settings', {}) || {};
+        let count = 0;
+        subjects.forEach(sub => {
+            const dates = generateDates(cls, sub, q, gi);
+            const b = all[cls]?.dates?.[sub]?.[q];
+            if (!b) return;
+            dates.forEach((d, idx) => {
+                if (!d.iso || d.iso > until) return;
+                if (gi >= 0) {
+                    if (b.groups?.[String(gi)]) delete b.groups[String(gi)][idx];
+                } else {
+                    delete b[idx];
+                    if (b.groups) Object.values(b.groups).forEach(g => { if (g) delete g[idx]; });
+                }
+                count++;
+            });
+        });
+        all.__ts = Date.now(); lsSet('lock_settings', all);
+        if (typeof window.syncLockSettingsToFirebase === 'function') window.syncLockSettingsToFirebase(all);
+        const status = document.getElementById('lock-until-status');
+        if (status) status.textContent = `🔓 ${subjects.length} ta fan bo‘yicha ${count} ta sana ${until} gacha ochildi${gi >= 0 ? ' (tanlangan guruh)' : ''}.`;
+        loadLockDatesList(); render(); showSaved();
+    };
     window.loadLockDatesList = function() {
         const cls = document.getElementById('lock-class-select').value;
         const sub = document.getElementById('lock-sub-select').value;
         const q = document.getElementById('lock-q-select').value;
+        const gi = Number(document.getElementById('lock-date-group-select')?.value ?? -1);
         const cont = document.getElementById('lock-dates-list');
         if (!cls || !sub) { cont.innerHTML = ''; return; }
-        const dates = generateDates(cls, sub, q);
-        const locks = lsGet('lock_settings', {})[cls]?.dates || {};
+        const dates = generateDates(cls, sub, q, gi);
+        const locks = lsGet('lock_settings', {})[cls] || {};
         let html = '';
-        dates.forEach((d, dIdx) => {
-            const isL = lockTrue(locks[sub]?.[q]?.[dIdx]);
-            html += `<div style="display:flex; gap:6px; align-items:center; margin-bottom:4px; font-size:11px;">
-                <span style="font-weight:bold; width:60px;">${hEsc(d.date)}:</span>
-                <label><input type="checkbox" ${isL?'checked':''} onchange="toggleLockDate('${jEsc(cls)}','${jEsc(sub)}','${jEsc(q)}',${dIdx},this.checked)">🔒</label>
+        dates.forEach((d, idx) => {
+            const on = isDateLocked(locks, sub, q, idx, gi);
+            html += `<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;font-size:11px;">
+                <span style="font-weight:bold;width:60px;">${hEsc(d.date)}:</span>
+                <label><input type="checkbox" ${on?'checked':''} onchange="toggleLockDate('${jEsc(cls)}','${jEsc(sub)}','${jEsc(q)}',${idx},this.checked,${gi})">🔒</label>
             </div>`;
         });
         cont.innerHTML = html;
     };
-    window.toggleLockDate = function(cls, sub, q, dIdx, locked) {
-        const allLocks = lsGet('lock_settings', {});
-        if (!allLocks[cls]) allLocks[cls] = {};
-        if (!allLocks[cls].dates) allLocks[cls].dates = {};
-        if (!allLocks[cls].dates[sub]) allLocks[cls].dates[sub] = {};
-        if (!allLocks[cls].dates[sub][q]) allLocks[cls].dates[sub][q] = {};
-        if (locked) allLocks[cls].dates[sub][q][dIdx] = true;
-        else delete allLocks[cls].dates[sub][q][dIdx];
-        lsSet('lock_settings', allLocks);
-        window.syncLockSettingsToFirebase(allLocks);
-        render();
+    window.toggleLockDate = function(cls, sub, q, idx, locked, gi=-1) {
+        const all = lsGet('lock_settings', {});
+        if (!all[cls]) all[cls] = {};
+        if (!all[cls].dates) all[cls].dates = {};
+        if (!all[cls].dates[sub]) all[cls].dates[sub] = {};
+        if (!all[cls].dates[sub][q]) all[cls].dates[sub][q] = {};
+        const b = all[cls].dates[sub][q];
+        if (Number(gi) >= 0) {
+            if (!b.groups) b.groups = {};
+            if (!b.groups[String(gi)]) b.groups[String(gi)] = {};
+            if (locked) b.groups[String(gi)][idx] = true; else delete b.groups[String(gi)][idx];
+        } else {
+            if (locked) b[idx] = true; else delete b[idx];
+        }
+        all.__ts = Date.now(); lsSet('lock_settings', all);
+        window.syncLockSettingsToFirebase(all); loadLockDatesList(); render(); showSaved();
     };
     window.renderStudentQuarterList = function() {
         const sel = document.getElementById('quarter-class-select');
@@ -4587,13 +5643,16 @@
         const firstQ = quarters[0] ? quarters[0].id : 'Q1';
         let html = '';
         students.forEach((n, i) => {
-            const cur = stQ[n] || firstQ;
-            let opts = '';
+            const cur = stQ[n] || 'AUTO';
+            let opts = `<option value="AUTO" ${cur === 'AUTO' ? 'selected' : ''}>Avtomatik (sana bo‘yicha)</option>`;
             quarters.forEach(q => { opts += `<option value="${q.id}" ${cur === q.id ? 'selected' : ''}>${hEsc(q.name)} (${q.id})</option>`; });
-            html += `<div style="display:flex; gap:10px; align-items:center; margin-bottom:6px; border-bottom:1px solid #f1f5f9; padding-bottom:6px;">
+            const active = cur === 'AUTO' ? getStudentQuarter(cls, n) : cur;
+            const activeName = quarters.find(q => q.id === active)?.name || active;
+            html += `<div style="display:flex; gap:10px; align-items:center; margin-bottom:6px; border-bottom:1px solid #f1f5f9; padding-bottom:6px; flex-wrap:wrap;">
                 <span style="font-weight:bold; width:25px; font-size:12px;">${i+1}.</span>
-                <span style="flex:1; font-size:13px; font-weight:600;">${hEsc(n)}</span>
-                <select class="gi" style="width:190px; height:32px; font-weight:normal;" onchange="setStudentQuarter('${jEsc(n)}', this.value)">${opts}</select>
+                <span style="flex:1; min-width:130px; font-size:13px; font-weight:600;">${hEsc(n)}</span>
+                <select class="gi" style="width:220px; max-width:100%; height:32px; font-weight:normal;" onchange="setStudentQuarter('${jEsc(n)}', this.value)">${opts}</select>
+                <span style="font-size:11px;color:#64748b;">Hozir: ${hEsc(activeName)}</span>
             </div>`;
         });
         cont.innerHTML = html;
@@ -4603,8 +5662,11 @@
         if (!cls) return;
         const s = getQuarterSettings();
         if (!s.students[cls]) s.students[cls] = {};
-        s.students[cls][name] = q;
+        if (q === 'AUTO') s.students[cls][name] = 'AUTO';
+        else if (s.quarters.some(item => item.id === q)) s.students[cls][name] = q;
+        else return;
         saveQuarterSettings(s);
+        renderStudentQuarterList();
         showSaved();
     };
 
@@ -4757,7 +5819,7 @@
                 // Imtihon va yakuniy natijalar boshqa baholar bilan bitta kartaga qo‘shilmaydi.
                 const purpose = String(item.purpose || '').trim();
                 const isFinalExam = ['Imtihon bahosi', 'Yakuniy natija'].includes(purpose);
-                const mergeKey = `${String(item.subject || '').trim().toLowerCase()}|${String(item.lessonDate || '')}|${String(item.quarter || '')}|${isFinalExam ? `final:${purpose}` : (item.lessonDate ? `lesson:${Number(item.lessonInstance || 0)}` : 'summary')}`;
+                const mergeKey = `${String(item.subject || '').trim().toLowerCase()}|${String(item.lessonDate || '')}|${String(item.quarter || '')}|${isFinalExam ? `final:${purpose}` : (item.lessonDate ? `lesson:${Number(item.lessonInstance || 0)}:${purpose.toLowerCase()}` : 'summary')}`;
                 if (!mergedDayItems.has(mergeKey)) mergedDayItems.set(mergeKey, []);
                 mergedDayItems.get(mergeKey).push(item);
             });
@@ -4773,9 +5835,21 @@
                 const uniqueItems = items.filter((x,i,a) => a.findIndex(y => String(y.value) === String(x.value) && String(y.purpose || '') === String(x.purpose || '')) === i);
                 const gradeContent = uniqueItems.map(x => `<span class="stu-latest-grade">${hEsc(x.value)}</span>`).join(' ');
                 const purposes = [...new Set(uniqueItems.map(x => String(x.purpose || '').trim()).filter(Boolean))].join(', ');
+                const subject = String(item.subject || '').toLowerCase();
+                // eMaktab dars oynalaridagi fan rasmlariga o'xshash ingichka konturli rasmlar.
+                let subjectArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><path d="M15 20h90v68H15zM28 34h64M28 48h64M28 62h48M28 76h56"/></svg>`;
+                if (/geograf/.test(subject)) subjectArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><path d="M24 10h72v82H24zM36 24h48M36 38h48M36 52h48M36 66h48M36 80h32"/><path d="M17 17q-8 7 0 14M103 17q8 7 0 14"/></svg>`;
+                else if (/texnolog|mehnat/.test(subject)) subjectArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><path d="M12 18h45q10 0 10 10v61q-7-9-18-9H12zM108 18H73q-6 0-6 10v61q7-9 18-9h23zM23 34h30M23 48h30M23 62h24M78 34h18M78 48h18M78 62h18"/></svg>`;
+                else if (/ona tili|adabiyot|rus til|ingliz|tili/.test(subject)) subjectArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><path d="M12 15h42q10 0 10 10v63q-8-10-18-10H12zM108 15H76q-12 0-12 10v63q8-10 18-10h26zM24 31h29M24 44h29M24 57h24M77 31h19M77 44h19M77 57h19"/><path d="M73 83q7-19 25-29"/></svg>`;
+                else if (/biolog|tabiat/.test(subject)) subjectArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><circle cx="60" cy="50" r="8"/><ellipse cx="60" cy="50" rx="43" ry="17" transform="rotate(25 60 50)"/><ellipse cx="60" cy="50" rx="43" ry="17" transform="rotate(-25 60 50)"/><ellipse cx="60" cy="50" rx="17" ry="43"/><circle cx="60" cy="50" r="3"/></svg>`;
+                else if (/fizika/.test(subject)) subjectArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><circle cx="60" cy="50" r="8"/><ellipse cx="60" cy="50" rx="43" ry="17"/><ellipse cx="60" cy="50" rx="43" ry="17" transform="rotate(60 60 50)"/><ellipse cx="60" cy="50" rx="43" ry="17" transform="rotate(-60 60 50)"/></svg>`;
+                else if (/kimyo/.test(subject)) subjectArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><path d="M46 12h28M53 12v31L29 80q-4 8 7 8h48q11 0 7-8L67 43V12M39 68h42M48 55h24"/><circle cx="53" cy="76" r="3"/><circle cx="69" cy="80" r="3"/></svg>`;
+                else if (/tasviriy|san.?at|musiqa/.test(subject)) subjectArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><path d="M61 12C34 12 14 30 14 54c0 20 15 35 34 35 9 0 14-6 14-13 0-6-5-9-5-14 0-7 7-11 16-11h14c12 0 20-8 20-19 0-12-19-20-46-20z"/><circle cx="37" cy="39" r="5"/><circle cx="57" cy="28" r="5"/><circle cx="78" cy="35" r="5"/><path d="M83 70l23-24 6 6-23 24-10 4z"/></svg>`;
+                else if (/jismoniy|sport/.test(subject)) subjectArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><circle cx="60" cy="50" r="43"/><path d="M31 19l22 14 23-2 15-18M17 49l23 2 12 20-5 22M89 24L78 44l11 20 22 3M52 33l-12 18 12 20 26-7 12-20"/></svg>`;
+                const subjectArtHtml = `<span class="stu-latest-subject-art" aria-hidden="true">${subjectArt}</span>`;
                 return `<article class="stu-latest-card">
                     <div class="stu-latest-posted">${hEsc(postedText)}</div>
-                    <div class="stu-latest-gradebox" style="background:${gradeColorHex(item.value)};gap:8px;flex-wrap:wrap">${gradeContent}</div>
+                    <div class="stu-latest-gradebox" style="background:${gradeColorHex(item.value)};gap:8px;flex-wrap:wrap">${subjectArtHtml}${gradeContent}</div>
                     <div class="stu-latest-bottom"><b>${hEsc(item.subject)}</b>
                         <span class="stu-latest-purpose">${hEsc(purposes)}</span>
                         ${lessonDate ? `<span class="stu-latest-for-date">${hEsc(lessonDate)}</span>` : ''}
@@ -4809,7 +5883,9 @@
         const viewDateStr = `${viewDate.getDate()}-${mon[viewDate.getMonth()]}`;
         const isToday = viewDateIso === isoOfDate(new Date());
 
-        document.getElementById('student-welcome').innerText = "👤 " + name;
+        // O‘quvchi panelida sayt nomi emas, faqat o‘quvchining ism-familiyasi ko‘rsatiladi.
+        document.getElementById('student-welcome').innerText = name;
+        document.title = name;
         document.getElementById('student-class-display').textContent = cls + "-sinf";
         document.getElementById('student-class-teacher-display').textContent = (lsGet('class_teachers', {})[cls]) || '—';
         const qDisp = document.getElementById('student-quarter-display');
@@ -5115,7 +6191,9 @@
         const studentNameForDates = loggedStudent && loggedStudent.name;
         const studentGroupForDates = studentNameForDates ? getStudentGroupForSubject(cls, sub, studentNameForDates) : null;
         const dates = generateDates(cls, sub, q, studentGroupForDates && studentGroupForDates.index >= 0 ? studentGroupForDates.index : -1);
-        const dIdx = dates.findIndex(x => x.date === dateStr && x.instance === lessonIdx);
+        let dIdx = dates.findIndex(x => (x.iso === dateIso || x.date === dateStr) && Number(x.instance || 0) === Number(lessonIdx || 0));
+        // Sana formatida farq bo'lsa ham, ayni kundagi dars oynasi ochilsin.
+        if (dIdx === -1) dIdx = dates.findIndex(x => x.iso === dateIso || x.date === dateStr);
         if (dIdx === -1) return;
 
         const time = getShiftedLessonTime(cls, sub, dIdx);
@@ -5165,16 +6243,28 @@
 
         const dateLabel = dt.toLocaleDateString('uz-UZ', { day:'numeric', month:'long', year:'numeric', weekday:'long' });
 
+        // eMaktab dars oynasidagi kabi fan uchun xira konturli rasm.
+        const subjectLower = String(sub || '').toLowerCase();
+        let lessonArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><path d="M15 15h90v72H15zM28 30h64M28 44h64M28 58h48M28 72h56"/></svg>`;
+        if (/geograf/.test(subjectLower)) lessonArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><path d="M24 10h72v82H24zM36 24h48M36 38h48M36 52h48M36 66h48M36 80h32"/></svg>`;
+        else if (/texnolog|mehnat/.test(subjectLower)) lessonArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><path d="M12 18h45q10 0 10 10v61q-7-9-18-9H12zM108 18H73q-6 0-6 10v61q7-9 18-9h23zM23 34h30M23 48h30M23 62h24M78 34h18M78 48h18M78 62h18"/></svg>`;
+        else if (/ona tili|adabiyot|rus til|ingliz|tili/.test(subjectLower)) lessonArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><path d="M12 15h42q10 0 10 10v63q-8-10-18-10H12zM108 15H76q-12 0-12 10v63q8-10 18-10h26zM24 31h29M24 44h29M24 57h24M77 31h19M77 44h19M77 57h19"/><path d="M73 83q7-19 25-29"/></svg>`;
+        else if (/biolog|tabiat/.test(subjectLower)) lessonArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><circle cx="60" cy="50" r="8"/><ellipse cx="60" cy="50" rx="43" ry="17" transform="rotate(25 60 50)"/><ellipse cx="60" cy="50" rx="43" ry="17" transform="rotate(-25 60 50)"/><ellipse cx="60" cy="50" rx="17" ry="43"/></svg>`;
+        else if (/fizika/.test(subjectLower)) lessonArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><circle cx="60" cy="50" r="8"/><ellipse cx="60" cy="50" rx="43" ry="17"/><ellipse cx="60" cy="50" rx="43" ry="17" transform="rotate(60 60 50)"/><ellipse cx="60" cy="50" rx="43" ry="17" transform="rotate(-60 60 50)"/></svg>`;
+        else if (/kimyo/.test(subjectLower)) lessonArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><path d="M46 12h28M53 12v31L29 80q-4 8 7 8h48q11 0 7-8L67 43V12M39 68h42M48 55h24"/><circle cx="53" cy="76" r="3"/><circle cx="69" cy="80" r="3"/></svg>`;
+        else if (/tasviriy|san.?at|musiqa/.test(subjectLower)) lessonArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><path d="M61 12C34 12 14 30 14 54c0 20 15 35 34 35 9 0 14-6 14-13 0-6-5-9-5-14 0-7 7-11 16-11h14c12 0 20-8 20-19 0-12-19-20-46-20z"/><circle cx="37" cy="39" r="5"/><circle cx="57" cy="28" r="5"/><circle cx="78" cy="35" r="5"/><path d="M83 70l23-24 6 6-23 24-10 4z"/></svg>`;
+        else if (/jismoniy|sport/.test(subjectLower)) lessonArt = `<svg viewBox="0 0 120 100" aria-hidden="true"><circle cx="60" cy="50" r="43"/><path d="M31 19l22 14 23-2 15-18M17 49l23 2 12 20-5 22M89 24L78 44l11 20 22 3M52 33l-12 18 12 20 26-7 12-20"/></svg>`;
+
         const body = document.getElementById('student-lesson-modal-body');
         body.innerHTML = `
-            <div style="text-align:center; font-size:13px; color:#64748b; margin-bottom:15px; font-weight:600;">
-                ${hEsc(time.start)} - ${hEsc(time.end)}, ${hEsc(dateLabel)}
+            <div style="position:relative;overflow:hidden;background:#fff;margin:-20px -20px 14px;padding:24px 20px 18px;border-bottom:1px solid #d1d5db;min-height:155px;">
+                <div style="position:absolute;right:-7px;bottom:-14px;width:145px;height:120px;opacity:.13;pointer-events:none;">${lessonArt}</div>
+                <div style="position:relative;z-index:1;font-size:13px;color:#888;margin-bottom:10px;font-weight:500;">${hEsc(time.start)} - ${hEsc(time.end)}, ${hEsc(dateLabel)}</div>
+                <div style="position:relative;z-index:1;font-size:13px;color:#222;margin-bottom:26px;">${lessonIdx+1}-DARS</div>
+                <div style="position:relative;z-index:1;font-size:22px;font-weight:700;color:#111;margin-bottom:4px;">${hEsc(sub)}</div>
+                ${topic ? `<div style="position:relative;z-index:1;font-size:14px;color:#888;line-height:1.4;max-width:85%;white-space:pre-wrap;">${hEsc(topic)}</div>` : ''}
+                ${studentGroup && studentGroup.name ? `<div style="position:relative;z-index:1;font-size:13px;color:#0e7490;margin-top:7px;">👥 ${hEsc(studentGroup.name)}</div>` : ''}
             </div>
-            <div style="font-size:13px; font-weight:700; color:#4361ee; margin-bottom:5px;">${lessonIdx+1}-DARS</div>
-            <div style="font-size:22px; font-weight:800; color:#1e293b; margin-bottom:5px;">${hEsc(sub)}</div>
-            ${studentGroup && studentGroup.name ? `<div style="font-size:13px;color:#0e7490;margin-bottom:8px;">👥 ${hEsc(studentGroup.name)}</div>` : ''}
-            ${topic ? `<div style="margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #e2e8f0;"><div style="font-size:12px;font-weight:800;color:#1e293b;margin-bottom:5px;">📖 Mavzu</div><div style="font-size:14px;color:#475569;white-space:pre-wrap;">${hEsc(topic)}</div></div>` : '<div style="margin-bottom:15px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;"></div>'}
-            
             <div style="font-size:12px; font-weight:800; color:#1e293b; background:#f1f5f9; padding:8px 12px; border-radius:6px; margin-bottom:10px;">Belgilar</div>
             <div style="margin-bottom:15px;">${marksHtml}</div>
 
@@ -5311,10 +6401,16 @@
                     chips.push(`<span title="${hEsc(d.date+' · '+label+' — to‘liq ma’lumotni ko‘rish')}" onclick="event.stopPropagation();openStudentLessonModal('${jEsc(cls)}','${jEsc(subject.name)}','${jEsc(q)}','${jEsc(d.iso || '')}',${Number(d.instance)||0})" style="display:inline-block;margin:2px;padding:2px 5px;border-radius:3px;color:#fff;background:${gradeColorHex(typeValue)};font-weight:700;cursor:pointer;">${hEsc(typeValue)}</span>`);
                 });
             });
-            const avg = valid.length ? (valid.reduce((a,b)=>a+b,0)/valid.length).toFixed(2).replace(/0+$/,'').replace(/\.$/,'') : '—';
+            const avgValue = valid.length ? valid.reduce((a,b)=>a+b,0)/valid.length : null;
+            const avg = avgValue === null ? '—' : avgValue.toFixed(2);
+            const avgFraction = avgValue === null ? null : avgValue - Math.floor(avgValue);
+            // O'rtacha aynan .50 bo'lsa rang berilmaydi; .50 dan past/yuqori qiymat eng yaqin butun baho rangini oladi.
+            const avgIsHalf = avgFraction !== null && Math.abs(avgFraction - 0.5) < 0.000001;
+            const avgGradeColor = avgValue === null || avgIsHalf ? '' : gradeColorHex(String(Math.round(avgValue)));
+            const avgCell = avgValue === null ? '—' : `<span style="display:inline-block;min-width:42px;padding:3px 7px;border-radius:4px;${avgIsHalf ? 'color:inherit;background:transparent;' : `color:#fff;background:${avgGradeColor};`}font-weight:700;">${avg}</span>`;
             const qm = m.__quarter || '';
             const cell = qm ? `<span style="display:inline-block;min-width:23px;padding:3px 5px;border-radius:4px;color:#fff;background:${gradeColorHex(qm)};font-weight:700;">${hEsc(qm)}</span>` : '—';
-            html += `<tr style="border-top:1px solid #e5e7eb;"><td style="padding:9px 10px;text-align:left;">${hEsc(subject.name)}</td><td style="padding:6px 8px;text-align:left;">${chips.length ? chips.join('') : '<span style="color:#94a3b8;">Qo\'yilmagan</span>'}</td><td style="padding:8px;text-align:center;">${avg}</td><td style="padding:8px;text-align:center;">${cell}</td></tr>`;
+            html += `<tr style="border-top:1px solid #e5e7eb;"><td style="padding:9px 10px;text-align:left;">${hEsc(subject.name)}</td><td style="padding:6px 8px;text-align:left;">${chips.length ? chips.join('') : '<span style="color:#94a3b8;">Qo\'yilmagan</span>'}</td><td style="padding:8px;text-align:center;">${avgCell}</td><td style="padding:8px;text-align:center;">${cell}</td></tr>`;
         });
         html += `</tbody></table></div>`;
         return html;
@@ -5998,7 +7094,9 @@
                 break;
             }
         }
-        if (currentQ && currentQ !== activeQuarter) {
+        // Foydalanuvchi chorak tugmasini bosgan bo‘lsa, shu sahifa davomida
+        // avtomatik tanlov uning tanlovini ustidan yozmasin.
+        if (!window.__manualQuarterSelection && currentQ && currentQ !== activeQuarter) {
             activeQuarter = currentQ;
             localStorage.setItem('last_Q', activeQuarter);
         }
@@ -6075,68 +7173,100 @@
     //    (Yuqoridagi openTotalReport da yarim yillikni hisobga olish kerak edi, lekin vaqt tejash uchun
     //     alohida "Yarim yillik" ustunini qo'shamiz - bu ustun 1-2 chorak o'rtachasi bo'ladi.)
 
-    // Aslida, openTotalReport ni qayta yozamiz:
-    const _originalOpenTotalReport2 = openTotalReport;
-    openTotalReport = function() {
-        const cls = document.getElementById('c-select').value;
-        const entries = getSortedStudentEntries(cls);
-        let subjects = getClassSubjects(cls);
-        if (teacher) {
-            const tName = teacher.trim();
-            subjects = subjects.filter(s => {
-                if (includesTeacher(s.teacher, tName)) return true;
-                const groups = lsGet(`groups_${cls}_${s.name}`, []);
-                return groups.some(g => includesTeacher(g.teacher, tName));
+    // "Jami" hisobotini barqaror ishlaydigan ko'rinishda qayta qurish.
+    // Guruh filtri yoki hozir tanlangan fan/sinf ko'rinishi butun hisobotni cheklamaydi.
+    window.openTotalReport = function() {
+        try {
+            const cls = document.getElementById('c-select')?.value || '';
+            if (!cls) { alert('Avval sinfni tanlang.'); return; }
+            const currentTeacher = String(teacher || localStorage.getItem('loggedTeacher') || '').trim();
+            const rawStudents = getOrderedRawStudentsRaw(cls);
+            const counts = {};
+            rawStudents.forEach(n => counts[n] = (counts[n] || 0) + 1);
+            const seen = {};
+            const entries = rawStudents.map(name => {
+                const occ = seen[name] || 0; seen[name] = occ + 1;
+                return { name, key: counts[name] > 1 ? `${name}__${occ}` : name,
+                    isDuplicate: counts[name] > 1, occ };
             });
-        }
-        if (subjects.length === 0) {
-            alert("Sizga biriktirilgan fanlar yo'q!");
-            return;
-        }
-        const quarters = getQuarters();
-        const extraCols = 4; // Imtihon, Natija, Yarim yillik, Yillik
-        let h = `<table style="min-width:1500px"><thead><tr><th>№</th><th class="s-name">O'quvchi</th>`;
-        subjects.forEach(s => h += `<th colspan="${quarters.length + extraCols}">${hEsc(s.name)}</th>`);
-        h += `</tr><tr><th></th><th></th>`;
-        subjects.forEach(() => {
-            quarters.forEach(q => h += `<th>${hEsc(q.name)}</th>`);
-            h += `<th>Imt.</th><th>Nat.</th><th>Yarim yil</th><th>Yil.</th>`;
-        });
-        h += `</tr></thead><tbody>`;
-        entries.forEach((entry, i) => {
-            const name = entry.name;
-            const studentKey = entry.key;
-            const dupBadge = entry.isDuplicate ? `<span class="dup-badge">#${entry.occ+1}</span>` : '';
-            h += `<tr><td>${i+1}</td><td class="s-name">${hEsc(name)}${dupBadge}</td>`;
-            subjects.forEach(s => {
-                // Chorak baholari
-                quarters.forEach(q => {
-                    const qv = getMarks(q.id, cls, s.name)[studentKey]?.['__quarter'] || '';
-                    h += `<td style="${getGradeStyle(qv)}; padding:8px;">${hEsc(qv)}</td>`;
+
+            // Asosiy fan, guruh ustozlari va sana bo'yicha alohida biriktirilgan
+            // ustozlarning fanlari ham ko'rinishi kerak.
+            let subjects = getClassSubjectsRaw(cls);
+            if (currentTeacher) {
+                const dateTeachers = lsGet('date_teachers', {}) || {};
+                const sameTeacher = value => String(value || '').split(',')
+                    .map(x => x.trim().toLocaleLowerCase()).filter(Boolean)
+                    .includes(currentTeacher.toLocaleLowerCase());
+                subjects = subjects.filter(subject => {
+                    if (sameTeacher(subject.teacher)) return true;
+                    const groups = lsGet(`groups_${cls}_${subject.name}`, []) || [];
+                    if (groups.some(g => sameTeacher(g.teacher))) return true;
+                    const prefix = `${cls}_${subject.name}_`;
+                    return Object.entries(dateTeachers).some(([key, value]) =>
+                        key.startsWith(prefix) && sameTeacher(value));
                 });
-                // Imtihon, Natija
-                const imt = getMarksByKey(`marks_Imtihon_${cls}_${s.name}`)[studentKey] || '';
-                const nat = getMarksByKey(`marks_Natija_${cls}_${s.name}`)[studentKey] || '';
-                // Yarim yillik: 1 va 2 chorak o'rtachasi (agar mavjud bo'lsa)
-                let halfYear = '';
-                if (quarters.length >= 2) {
-                    const q1 = getMarks(quarters[0].id, cls, s.name)[studentKey]?.['__quarter'] || '';
-                    const q2 = getMarks(quarters[1].id, cls, s.name)[studentKey]?.['__quarter'] || '';
-                    if (q1 && q2 && !isNaN(q1) && !isNaN(q2)) {
-                        halfYear = ((parseFloat(q1) + parseFloat(q2)) / 2).toFixed(1);
-                    }
-                }
-                const yil = getMarksByKey(`marks_Annual_${cls}_${s.name}`)[studentKey] || '';
-                h += `<td><input type="text" class="gi" style="${getGradeStyle(imt)} width:40px" value="${hEsc(imt)}" onchange="saveExtra('${jEsc(cls)}','${jEsc(s.name)}','Imtihon', this.dataset.k, this.value)" data-k="${hEsc(studentKey)}"></td>
-                      <td><input type="text" class="gi" style="${getGradeStyle(nat)} width:40px" value="${hEsc(nat)}" onchange="saveExtra('${jEsc(cls)}','${jEsc(s.name)}','Natija', this.dataset.k, this.value)" data-k="${hEsc(studentKey)}"></td>
-                      <td style="padding:8px; font-weight:bold; color:#4361ee;">${halfYear || '—'}</td>
-                      <td class="y-col"><input type="text" class="gi" style="${getGradeStyle(yil)} width:40px" value="${hEsc(yil)}" onchange="saveY('marks_Annual_${jEsc(cls)}_${jEsc(s.name)}', this.dataset.k, this.value)" data-k="${hEsc(studentKey)}"></td>`;
+            }
+            if (!subjects.length) {
+                alert(currentTeacher ? 'Sizga biriktirilgan fanlar topilmadi.' : 'Bu sinfda fanlar topilmadi.');
+                return;
+            }
+            if (!entries.length) {
+                alert('Tanlangan sinfda o‘quvchilar ro‘yxati bo‘sh.');
+                return;
+            }
+
+            const quarters = getQuarters().filter(q => q.visible !== false);
+            const extraCols = 4;
+            let h = `<div style="overflow-x:auto"><table style="min-width:1500px;width:100%;border-collapse:collapse"><thead><tr><th>№</th><th class="s-name">O‘quvchi</th>`;
+            subjects.forEach(subject => h += `<th colspan="${quarters.length + extraCols}">${hEsc(subject.name)}</th>`);
+            h += `</tr><tr><th></th><th></th>`;
+            subjects.forEach(() => {
+                quarters.forEach(q => h += `<th>${hEsc(q.name)}</th>`);
+                h += '<th>Imt.</th><th>Nat.</th><th>Yarim yil</th><th>Yil.</th>';
             });
-            h += `</tr>`;
-        });
-        document.getElementById('report-area').innerHTML = h + `</tbody></table>` + renderTeacherOwnLatestMarks(cls, subjects, 10);
-        document.getElementById('report-title').innerText = `${cls}-sinf | Jami`;
-        document.getElementById('report-modal').style.display = 'block';
+            h += '</tr></thead><tbody>';
+            entries.forEach((entry, i) => {
+                const studentKey = entry.key;
+                const dupBadge = entry.isDuplicate ? `<span class="dup-badge">#${entry.occ + 1}</span>` : '';
+                h += `<tr><td>${i + 1}</td><td class="s-name">${hEsc(entry.name)}${dupBadge}</td>`;
+                subjects.forEach(subject => {
+                    quarters.forEach(q => {
+                        const qv = (getMarks(q.id, cls, subject.name)[studentKey] || {}).__quarter || '';
+                        h += `<td style="${getGradeStyle(qv)};padding:8px;">${hEsc(qv)}</td>`;
+                    });
+                    const imt = getMarksByKey(`marks_Imtihon_${cls}_${subject.name}`)[studentKey] || '';
+                    const nat = getMarksByKey(`marks_Natija_${cls}_${subject.name}`)[studentKey] || '';
+                    let halfYear = '';
+                    if (quarters.length >= 2) {
+                        const q1 = (getMarks(quarters[0].id, cls, subject.name)[studentKey] || {}).__quarter || '';
+                        const q2 = (getMarks(quarters[1].id, cls, subject.name)[studentKey] || {}).__quarter || '';
+                        if (q1 !== '' && q2 !== '' && !isNaN(q1) && !isNaN(q2))
+                            halfYear = ((Number(q1) + Number(q2)) / 2).toFixed(1);
+                    }
+                    const yil = getMarksByKey(`marks_Annual_${cls}_${subject.name}`)[studentKey] || '';
+                    h += `<td><input type="text" class="gi" style="${getGradeStyle(imt)};width:40px" value="${hEsc(imt)}" onchange="saveExtra('${jEsc(cls)}','${jEsc(subject.name)}','Imtihon',this.dataset.k,this.value)" data-k="${hEsc(studentKey)}"></td>`;
+                    h += `<td><input type="text" class="gi" style="${getGradeStyle(nat)};width:40px" value="${hEsc(nat)}" onchange="saveExtra('${jEsc(cls)}','${jEsc(subject.name)}','Natija',this.dataset.k,this.value)" data-k="${hEsc(studentKey)}"></td>`;
+                    h += `<td style="padding:8px;font-weight:bold;color:#4361ee">${halfYear || '—'}</td>`;
+                    h += `<td class="y-col"><input type="text" class="gi" style="${getGradeStyle(yil)};width:40px" value="${hEsc(yil)}" onchange="saveY('marks_Annual_${jEsc(cls)}_${jEsc(subject.name)}',this.dataset.k,this.value)" data-k="${hEsc(studentKey)}"></td>`;
+                });
+                h += '</tr>';
+            });
+            h += '</tbody></table></div>';
+            // So'nggi baholar qo'shimcha blok bo'lib chiqadi; xato bo'lsa asosiy jadval ochilishiga xalal bermaydi.
+            try { h += renderTeacherOwnLatestMarks(cls, subjects, 10); }
+            catch (latestErr) { console.warn('So‘nggi baholar bloki chizilmadi:', latestErr); }
+            const area = document.getElementById('report-area');
+            const title = document.getElementById('report-title');
+            const modal = document.getElementById('report-modal');
+            if (!area || !title || !modal) throw new Error('Jami hisobot oynasining kerakli qismi topilmadi.');
+            area.innerHTML = h;
+            title.innerText = `${cls}-sinf | Jami`;
+            modal.style.display = 'block';
+        } catch (err) {
+            console.error('Jami hisobot xatosi:', err);
+            alert('Jami bo‘limini ochishda xatolik yuz berdi: ' + (err?.message || err));
+        }
     };
 
     // Ustozning Jami bo'limida faqat o'z fanlaridagi eng so'nggi 10 ta bahoni alohida ko'rsatish.
@@ -6419,3 +7549,4 @@
 </script>
 </body>
 </html>
+<script async src="/.netlify/scripts/hud?variant=public" data-nf-variant="public" data-netlify-site-id="1d62ab26-c258-4fc7-9659-1a7ac817baae" data-app-host="app.netlify.com" data-account-tier="free"></script>
